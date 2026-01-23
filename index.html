@@ -1,0 +1,724 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Inventory Web App</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.5.31/dist/jspdf.plugin.autotable.min.js"></script>
+</head>
+
+<body class="bg-slate-50 text-slate-900" x-data="app()" x-init="init()">
+
+  <!-- Topbar -->
+  <div class="sticky top-0 z-30 backdrop-blur bg-white/80 border-b border-slate-200">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-2xl bg-slate-900"></div>
+        <div>
+          <div class="font-semibold leading-tight">Inventory</div>
+          <div class="text-xs text-slate-500">Google Sheets + Apps Script API</div>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2" x-show="isAuthed">
+        <div class="text-sm text-slate-600">
+          <span class="font-medium" x-text="user.fullName || user.staffId"></span>
+          <span class="text-slate-400">•</span>
+          <span class="uppercase text-xs px-2 py-1 rounded-full bg-slate-100 border border-slate-200" x-text="user.role"></span>
+        </div>
+        <button class="px-3 py-2 rounded-xl bg-slate-900 text-white text-sm hover:bg-slate-800"
+                @click="logout()">Logout</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div class="max-w-7xl mx-auto px-4 py-6">
+
+    <!-- Toast -->
+    <div class="fixed bottom-4 right-4 z-50 space-y-2">
+      <template x-for="t in toasts" :key="t.id">
+        <div class="px-4 py-3 rounded-2xl shadow bg-white border border-slate-200 max-w-sm">
+          <div class="text-sm font-medium" x-text="t.title"></div>
+          <div class="text-xs text-slate-600" x-text="t.message"></div>
+        </div>
+      </template>
+    </div>
+
+    <!-- Login -->
+    <div x-show="!isAuthed" class="min-h-[70vh] grid place-items-center">
+      <div class="w-full max-w-md bg-white border border-slate-200 rounded-3xl shadow-sm p-6">
+        <div class="text-xl font-semibold">Login</div>
+        <div class="text-sm text-slate-500 mt-1">ใช้ StaffID และ Password เพื่อเข้าสู่ระบบ</div>
+
+        <div class="mt-5 space-y-3">
+          <div>
+            <label class="text-xs text-slate-600">StaffID</label>
+            <input class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                   x-model="loginForm.staffId" autocomplete="username">
+          </div>
+
+          <div>
+            <label class="text-xs text-slate-600">Password</label>
+            <input type="password" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                   x-model="loginForm.password" autocomplete="current-password">
+          </div>
+
+          <button class="w-full px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800"
+                  :disabled="busy"
+                  @click="login()">
+            <span x-text="busy ? 'Signing in...' : 'Sign in'"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- App -->
+    <div x-show="isAuthed" class="space-y-6">
+
+      <!-- Tabs -->
+      <div class="flex flex-wrap gap-2">
+        <button class="px-4 py-2 rounded-2xl border text-sm"
+                :class="tab==='inventory' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 hover:bg-slate-50'"
+                @click="tab='inventory'">Stock</button>
+
+        <button class="px-4 py-2 rounded-2xl border text-sm"
+                :class="tab==='tx' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 hover:bg-slate-50'"
+                @click="tab='tx'">Transactions</button>
+
+        <button class="px-4 py-2 rounded-2xl border text-sm"
+                x-show="isAdmin"
+                :class="tab==='receive' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 hover:bg-slate-50'"
+                @click="tab='receive'">Receive (IN)</button>
+
+        <button class="px-4 py-2 rounded-2xl border text-sm"
+                :class="tab==='issue' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 hover:bg-slate-50'"
+                @click="tab='issue'">Issue (OUT)</button>
+
+        <button class="px-4 py-2 rounded-2xl border text-sm"
+                x-show="isAdmin"
+                :class="tab==='newitem' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 hover:bg-slate-50'"
+                @click="tab='newitem'">New Item</button>
+
+        <button class="px-4 py-2 rounded-2xl border text-sm"
+                x-show="isAdmin"
+                :class="tab==='settings' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 hover:bg-slate-50'"
+                @click="tab='settings'">Settings</button>
+      </div>
+
+      <!-- Inventory -->
+      <section x-show="tab==='inventory'" class="bg-white border border-slate-200 rounded-3xl shadow-sm p-5">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div>
+            <div class="text-lg font-semibold">Stock คงเหลือ</div>
+            <div class="text-sm text-slate-500">แสดง: ชื่อ Item, จำนวนคงเหลือ, หน่วย (รวมรายการซ้ำแล้ว)</div>
+          </div>
+          <div class="flex gap-2">
+            <input class="w-full md:w-80 px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                   x-model="inventorySearch" placeholder="Search item...">
+            <button class="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800"
+                    :disabled="busy"
+                    @click="loadAll()">Refresh</button>
+          </div>
+        </div>
+
+        <!-- Desktop table -->
+        <div class="mt-4 overflow-x-auto hidden md:block">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-slate-500">
+                <th class="text-left py-2">รูป</th>
+                <th class="text-left py-2">Item</th>
+                <th class="text-right py-2">คงเหลือ</th>
+                <th class="text-left py-2">หน่วย</th>
+                <th class="text-right py-2">Minimum</th>
+                <th class="text-left py-2">สถานะ</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="it in filteredItems()" :key="it.itemCode+'|'+it.itemName+'|'+it.unit">
+                <tr class="border-t border-slate-100">
+                  <td class="py-2">
+                    <div class="w-10 h-10 rounded-xl overflow-hidden bg-slate-100 border border-slate-200">
+                      <img :src="it.imageUrl" class="w-full h-full object-cover" @error="$event.target.style.display='none'">
+                    </div>
+                  </td>
+                  <td class="py-2">
+                    <div class="font-medium" x-text="it.itemName"></div>
+                    <div class="text-xs text-slate-500" x-text="it.itemCode"></div>
+                  </td>
+                  <td class="py-2 text-right font-semibold" x-text="it.qtyRemain"></td>
+                  <td class="py-2" x-text="it.unit"></td>
+                  <td class="py-2 text-right" x-text="it.minimum || 0"></td>
+                  <td class="py-2">
+                    <span class="text-xs px-2 py-1 rounded-full border"
+                          :class="it.belowMin ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-emerald-50 border-emerald-200 text-emerald-700'"
+                          x-text="it.belowMin ? 'LOW' : 'OK'"></span>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Mobile cards -->
+        <div class="mt-4 md:hidden space-y-3">
+          <template x-for="it in filteredItems()" :key="it.itemCode+'|'+it.itemName+'|'+it.unit">
+            <div class="p-4 rounded-2xl border border-slate-200">
+              <div class="flex gap-3">
+                <div class="w-12 h-12 rounded-2xl overflow-hidden bg-slate-100 border border-slate-200">
+                  <img :src="it.imageUrl" class="w-full h-full object-cover" @error="$event.target.style.display='none'">
+                </div>
+                <div class="flex-1">
+                  <div class="font-semibold" x-text="it.itemName"></div>
+                  <div class="text-xs text-slate-500" x-text="it.itemCode"></div>
+                </div>
+                <div>
+                  <span class="text-xs px-2 py-1 rounded-full border"
+                        :class="it.belowMin ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-emerald-50 border-emerald-200 text-emerald-700'"
+                        x-text="it.belowMin ? 'LOW' : 'OK'"></span>
+                </div>
+              </div>
+              <div class="mt-3 grid grid-cols-3 gap-2 text-sm">
+                <div class="p-2 rounded-xl bg-slate-50 border border-slate-100">
+                  <div class="text-xs text-slate-500">คงเหลือ</div>
+                  <div class="font-semibold" x-text="it.qtyRemain"></div>
+                </div>
+                <div class="p-2 rounded-xl bg-slate-50 border border-slate-100">
+                  <div class="text-xs text-slate-500">หน่วย</div>
+                  <div class="font-semibold" x-text="it.unit"></div>
+                </div>
+                <div class="p-2 rounded-xl bg-slate-50 border border-slate-100">
+                  <div class="text-xs text-slate-500">Minimum</div>
+                  <div class="font-semibold" x-text="it.minimum || 0"></div>
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
+      </section>
+
+      <!-- Transactions -->
+      <section x-show="tab==='tx'" class="bg-white border border-slate-200 rounded-3xl shadow-sm p-5">
+        <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+          <div>
+            <div class="text-lg font-semibold">Transactions</div>
+            <div class="text-sm text-slate-500">ดูประวัติรับเข้า/เบิก/ปรับยอด และ Export PDF รายการเบิก</div>
+          </div>
+
+          <div class="grid grid-cols-2 lg:grid-cols-5 gap-2 w-full lg:w-auto">
+            <input type="date" class="px-3 py-2 rounded-xl border border-slate-200"
+                   x-model="txFilter.from">
+            <input type="date" class="px-3 py-2 rounded-xl border border-slate-200"
+                   x-model="txFilter.to">
+            <select class="px-3 py-2 rounded-xl border border-slate-200" x-model="txFilter.type">
+              <option value="">ALL</option>
+              <option value="IN">IN</option>
+              <option value="OUT">OUT</option>
+              <option value="ADJ">ADJ</option>
+            </select>
+            <input class="px-3 py-2 rounded-xl border border-slate-200" x-model="txFilter.q" placeholder="Search...">
+            <button class="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800"
+                    :disabled="busy"
+                    @click="loadTransactions()">Apply</button>
+          </div>
+        </div>
+
+        <div class="mt-4 flex flex-wrap gap-2">
+          <button class="px-4 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50"
+                  @click="exportOutPdf()">
+            Export OUT as PDF
+          </button>
+          <button class="px-4 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50"
+                  x-show="isAdmin"
+                  @click="runMinStock()">
+            Run Minimum Stock Email Now
+          </button>
+        </div>
+
+        <div class="mt-4 overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-slate-500">
+                <th class="text-left py-2">Time</th>
+                <th class="text-left py-2">Type</th>
+                <th class="text-left py-2">Item</th>
+                <th class="text-right py-2">Qty</th>
+                <th class="text-left py-2">Unit</th>
+                <th class="text-left py-2">Staff</th>
+                <th class="text-left py-2">Note</th>
+                <th class="text-left py-2">Ref</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="t in transactions" :key="t.TxID">
+                <tr class="border-t border-slate-100">
+                  <td class="py-2" x-text="fmtTime(t.Timestamp)"></td>
+                  <td class="py-2">
+                    <span class="text-xs px-2 py-1 rounded-full border"
+                          :class="String(t['Type(IN/OUT/ADJ)']).toUpperCase()==='OUT' ? 'bg-amber-50 border-amber-200 text-amber-700' :
+                                  String(t['Type(IN/OUT/ADJ)']).toUpperCase()==='IN' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
+                                  'bg-slate-50 border-slate-200 text-slate-700'"
+                          x-text="t['Type(IN/OUT/ADJ)']"></span>
+                  </td>
+                  <td class="py-2">
+                    <div class="font-medium" x-text="t.ItemName"></div>
+                    <div class="text-xs text-slate-500" x-text="t.ItemCode"></div>
+                  </td>
+                  <td class="py-2 text-right font-semibold" x-text="t.Qty"></td>
+                  <td class="py-2" x-text="t.Unit"></td>
+                  <td class="py-2" x-text="t.StaffID"></td>
+                  <td class="py-2" x-text="t.Note"></td>
+                  <td class="py-2" x-text="t.RefNo"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Receive (Admin only) -->
+      <section x-show="tab==='receive'" class="bg-white border border-slate-200 rounded-3xl shadow-sm p-5" x-show="isAdmin">
+        <div class="text-lg font-semibold">Receive Stock (IN) — Admin only</div>
+        <div class="text-sm text-slate-500 mt-1">บันทึกรับเข้า (เพิ่มสต็อก)</div>
+
+        <div class="mt-4 grid grid-cols-1 lg:grid-cols-5 gap-3">
+          <div class="lg:col-span-2">
+            <label class="text-xs text-slate-600">Item</label>
+            <input class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200"
+                   x-model="txFormIn.itemSearch" placeholder="ค้นหา item...">
+            <select class="mt-2 w-full px-3 py-2 rounded-xl border border-slate-200"
+                    x-model="txFormIn.itemKey">
+              <template x-for="it in itemOptions(txFormIn.itemSearch)" :key="it.itemCode+'|'+it.itemName+'|'+it.unit">
+                <option :value="it.itemCode+'|'+it.itemName+'|'+it.unit"
+                        x-text="it.itemName+' ('+it.unit+')'"></option>
+              </template>
+            </select>
+          </div>
+
+          <div>
+            <label class="text-xs text-slate-600">Qty</label>
+            <input type="number" min="0" step="0.01" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200"
+                   x-model.number="txFormIn.qty">
+          </div>
+
+          <div>
+            <label class="text-xs text-slate-600">RefNo</label>
+            <input class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200"
+                   x-model="txFormIn.refNo" placeholder="PO/Invoice...">
+          </div>
+
+          <div>
+            <label class="text-xs text-slate-600">Note</label>
+            <input class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200"
+                   x-model="txFormIn.note" placeholder="หมายเหตุ...">
+          </div>
+        </div>
+
+        <div class="mt-4">
+          <button class="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800"
+                  :disabled="busy"
+                  @click="submitTx('IN')">Save IN</button>
+        </div>
+      </section>
+
+      <!-- Issue -->
+      <section x-show="tab==='issue'" class="bg-white border border-slate-200 rounded-3xl shadow-sm p-5">
+        <div class="text-lg font-semibold">Issue Stock (OUT)</div>
+        <div class="text-sm text-slate-500 mt-1">บันทึกการเบิก (ตัดสต็อก) — User ทำได้</div>
+
+        <div class="mt-4 grid grid-cols-1 lg:grid-cols-5 gap-3">
+          <div class="lg:col-span-2">
+            <label class="text-xs text-slate-600">Item</label>
+            <input class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200"
+                   x-model="txFormOut.itemSearch" placeholder="ค้นหา item...">
+            <select class="mt-2 w-full px-3 py-2 rounded-xl border border-slate-200"
+                    x-model="txFormOut.itemKey">
+              <template x-for="it in itemOptions(txFormOut.itemSearch)" :key="it.itemCode+'|'+it.itemName+'|'+it.unit">
+                <option :value="it.itemCode+'|'+it.itemName+'|'+it.unit"
+                        x-text="it.itemName+' ('+it.unit+')'"></option>
+              </template>
+            </select>
+          </div>
+
+          <div>
+            <label class="text-xs text-slate-600">Qty</label>
+            <input type="number" min="0" step="0.01" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200"
+                   x-model.number="txFormOut.qty">
+          </div>
+
+          <div>
+            <label class="text-xs text-slate-600">RefNo</label>
+            <input class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200"
+                   x-model="txFormOut.refNo" placeholder="เอกสารเบิก...">
+          </div>
+
+          <div class="lg:col-span-2">
+            <label class="text-xs text-slate-600">Note</label>
+            <input class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200"
+                   x-model="txFormOut.note" placeholder="ชื่อผู้รับ/หน่วยงาน/หมายเหตุ...">
+          </div>
+        </div>
+
+        <div class="mt-4">
+          <button class="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800"
+                  :disabled="busy"
+                  @click="submitTx('OUT')">Save OUT</button>
+        </div>
+      </section>
+
+      <!-- New Item (Admin) -->
+      <section x-show="tab==='newitem'" class="bg-white border border-slate-200 rounded-3xl shadow-sm p-5" x-show="isAdmin">
+        <div class="text-lg font-semibold">New Item — Admin only</div>
+        <div class="text-sm text-slate-500 mt-1">เพิ่มรายการสินค้าใหม่ (พร้อมรูป, Minimum)</div>
+
+        <div class="mt-4 grid grid-cols-1 lg:grid-cols-6 gap-3">
+          <div class="lg:col-span-2">
+            <label class="text-xs text-slate-600">ItemCode</label>
+            <input class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200" x-model="itemForm.itemCode">
+          </div>
+          <div class="lg:col-span-2">
+            <label class="text-xs text-slate-600">ItemName *</label>
+            <input class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200" x-model="itemForm.itemName">
+          </div>
+          <div>
+            <label class="text-xs text-slate-600">Unit *</label>
+            <input class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200" x-model="itemForm.unit">
+          </div>
+          <div>
+            <label class="text-xs text-slate-600">Minimum</label>
+            <input type="number" min="0" step="0.01" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200"
+                   x-model.number="itemForm.minimum">
+          </div>
+
+          <div class="lg:col-span-4">
+            <label class="text-xs text-slate-600">ImageURL</label>
+            <input class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200" x-model="itemForm.imageUrl"
+                   placeholder="https://...">
+          </div>
+          <div class="lg:col-span-2 flex items-end gap-3">
+            <div class="w-14 h-14 rounded-2xl overflow-hidden bg-slate-100 border border-slate-200">
+              <img :src="itemForm.imageUrl" class="w-full h-full object-cover" @error="$event.target.style.display='none'">
+            </div>
+            <button class="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800"
+                    :disabled="busy"
+                    @click="saveItem()">Save Item</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Settings (Admin) -->
+      <section x-show="tab==='settings'" class="bg-white border border-slate-200 rounded-3xl shadow-sm p-5" x-show="isAdmin">
+        <div class="text-lg font-semibold">Settings</div>
+        <div class="text-sm text-slate-500 mt-1">
+          การตั้งค่า Email minimum stock อยู่ในชีต Config (แก้ที่ชีตได้โดยตรง)
+        </div>
+
+        <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div class="p-4 rounded-2xl border border-slate-200 bg-slate-50">
+            <div class="text-sm font-medium">Minimum Stock Email</div>
+            <div class="text-xs text-slate-600 mt-1">
+              แก้ในชีต <span class="font-mono">Config</span>: MIN_STOCK_EMAIL_TO, MIN_STOCK_EMAIL_CC, MIN_STOCK_EMAIL_SUBJECT
+            </div>
+            <div class="mt-3 flex gap-2">
+              <button class="px-4 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50"
+                      @click="runMinStock()">Run Email Now</button>
+            </div>
+          </div>
+
+          <div class="p-4 rounded-2xl border border-slate-200 bg-slate-50">
+            <div class="text-sm font-medium">Security note</div>
+            <div class="text-xs text-slate-600 mt-1">
+              GitHub Pages เป็น public static site; การป้องกันขึ้นกับ token ที่ออกโดย Apps Script (เหมาะกับงานภายใน)
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+<script>
+function app() {
+  return {
+    API_URL: 'https://script.google.com/macros/s/AKfycbwz6YOLJmxuy8-8Pqg6B35wQfiyKPNiCqvpdbekCZVg_xkJXEIQScsX_-O8jBg43h2h/exec',
+
+    busy: false,
+    tab: 'inventory',
+    toasts: [],
+
+    token: localStorage.getItem('inv_token') || '',
+    user: JSON.parse(localStorage.getItem('inv_user') || 'null'),
+
+    items: [],
+    inventorySearch: '',
+
+    transactions: [],
+    txFilter: { from: '', to: '', type: '', q: '' },
+
+    loginForm: { staffId: '', password: '' },
+
+    txFormIn: { itemSearch: '', itemKey: '', qty: 1, note: '', refNo: '' },
+    txFormOut: { itemSearch: '', itemKey: '', qty: 1, note: '', refNo: '' },
+
+    itemForm: { itemCode: '', itemName: '', unit: '', minimum: 0, imageUrl: '' },
+
+    get isAuthed() { return !!this.token && !!this.user; },
+    get isAdmin() { return this.user && String(this.user.role).toLowerCase() === 'admin'; },
+
+    init() {
+      if (this.isAuthed && this.API_URL && this.API_URL.startsWith('http')) {
+        this.loadAll();
+      }
+    },
+
+    toast(title, message) {
+      const id = Math.random().toString(16).slice(2);
+      this.toasts.push({ id, title, message });
+      setTimeout(()=> this.toasts = this.toasts.filter(x=>x.id!==id), 3500);
+    },
+
+    logout() {
+      localStorage.removeItem('inv_token');
+      localStorage.removeItem('inv_user');
+      this.token = '';
+      this.user = null;
+      this.items = [];
+      this.transactions = [];
+      this.toast('Logout', 'ออกจากระบบแล้ว');
+    },
+
+    async login() {
+      if (!this.API_URL || !this.API_URL.startsWith('http')) {
+        this.toast('Error', 'ยังไม่ได้ตั้งค่า Apps Script Web App URL ในโค้ด');
+        return;
+      }
+      this.busy = true;
+      try {
+        const url = new URL(this.API_URL);
+        url.searchParams.set('action', 'login');
+        url.searchParams.set('staffId', this.loginForm.staffId || '');
+        url.searchParams.set('password', this.loginForm.password || '');
+
+        const res = await fetch(url.toString());
+        const json = await res.json();
+        if (!json.ok) throw new Error(json.error || 'Login failed');
+
+        this.token = json.data.token;
+        this.user = json.data.user;
+
+        localStorage.setItem('inv_token', this.token);
+        localStorage.setItem('inv_user', JSON.stringify(this.user));
+
+        this.toast('Success', 'เข้าสู่ระบบสำเร็จ');
+        await this.loadAll();
+      } catch (e) {
+        this.toast('Login error', e.message || String(e));
+      } finally {
+        this.busy = false;
+      }
+    },
+
+    async apiGet(action, params={}) {
+      const url = new URL(this.API_URL);
+      url.searchParams.set('action', action);
+      if (this.token) url.searchParams.set('token', this.token);
+      Object.keys(params).forEach(k=>{
+        if (params[k] !== '' && params[k] != null) url.searchParams.set(k, params[k]);
+      });
+
+      const res = await fetch(url.toString());
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.error || 'API error');
+      return json.data;
+    },
+
+    async apiPost(payload) {
+      const res = await fetch(this.API_URL, { method: 'POST', body: JSON.stringify(payload) });
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.error || 'API error');
+      return json.data;
+    },
+
+    async loadAll() {
+      this.busy = true;
+      try {
+        await Promise.all([this.loadItems(), this.loadTransactions()]);
+      } catch (e) {
+        this.toast('Error', e.message || String(e));
+      } finally {
+        this.busy = false;
+      }
+    },
+
+    async loadItems() {
+      const data = await this.apiGet('list');
+      this.items = Array.isArray(data) ? data : [];
+      if (!this.txFormIn.itemKey && this.items.length) {
+        this.txFormIn.itemKey = this.items[0].itemCode+'|'+this.items[0].itemName+'|'+this.items[0].unit;
+      }
+      if (!this.txFormOut.itemKey && this.items.length) {
+        this.txFormOut.itemKey = this.items[0].itemCode+'|'+this.items[0].itemName+'|'+this.items[0].unit;
+      }
+    },
+
+    async loadTransactions() {
+      const data = await this.apiGet('transactions', {
+        from: this.txFilter.from,
+        to: this.txFilter.to,
+        type: this.txFilter.type,
+        q: this.txFilter.q,
+        limit: 500
+      });
+      this.transactions = Array.isArray(data) ? data : [];
+    },
+
+    filteredItems() {
+      const q = (this.inventorySearch || '').toLowerCase().trim();
+      if (!q) return this.items;
+      return this.items.filter(it => {
+        const hay = [it.itemName, it.itemCode, it.unit].join(' ').toLowerCase();
+        return hay.includes(q);
+      });
+    },
+
+    itemOptions(search) {
+      const q = (search || '').toLowerCase().trim();
+      if (!q) return this.items.slice(0, 200);
+      return this.items
+        .filter(it => (it.itemName||'').toLowerCase().includes(q) || (it.itemCode||'').toLowerCase().includes(q))
+        .slice(0, 200);
+    },
+
+    async submitTx(type) {
+      const form = (type === 'IN') ? this.txFormIn : this.txFormOut;
+      const [itemCode, itemName, unit] = (form.itemKey || '||').split('|');
+
+      if (!itemName || !unit) { this.toast('Error','กรุณาเลือก Item'); return; }
+      if (!form.qty || Number(form.qty) <= 0) { this.toast('Error','Qty ต้องมากกว่า 0'); return; }
+
+      this.busy = true;
+      try {
+        await this.apiPost({
+          action: 'addTx',
+          token: this.token,
+          tx: {
+            type,
+            itemCode,
+            itemName,
+            unit,
+            qty: Number(form.qty),
+            note: form.note || '',
+            refNo: form.refNo || ''
+          }
+        });
+
+        this.toast('Saved', `บันทึก ${type} สำเร็จ`);
+        form.qty = 1; form.note=''; form.refNo='';
+        await this.loadAll();
+        this.tab = 'inventory';
+      } catch (e) {
+        this.toast('Error', e.message || String(e));
+      } finally {
+        this.busy = false;
+      }
+    },
+
+    async saveItem() {
+      if (!this.itemForm.itemName || !this.itemForm.unit) {
+        this.toast('Error', 'ต้องมี ItemName และ Unit');
+        return;
+      }
+      this.busy = true;
+      try {
+        await this.apiPost({
+          action: 'addItem',
+          token: this.token,
+          item: {
+            itemCode: this.itemForm.itemCode || '',
+            itemName: this.itemForm.itemName,
+            unit: this.itemForm.unit,
+            minimum: Number(this.itemForm.minimum || 0),
+            imageUrl: this.itemForm.imageUrl || '',
+            isActive: 'Y'
+          }
+        });
+        this.toast('Saved', 'เพิ่ม Item สำเร็จ');
+        this.itemForm = { itemCode:'', itemName:'', unit:'', minimum:0, imageUrl:'' };
+        await this.loadItems();
+        this.tab = 'inventory';
+      } catch (e) {
+        this.toast('Error', e.message || String(e));
+      } finally {
+        this.busy = false;
+      }
+    },
+
+    fmtTime(v) {
+      if (!v) return '';
+      const d = new Date(v);
+      if (isNaN(d.getTime())) return String(v);
+      return d.toLocaleString();
+    },
+
+    exportOutPdf() {
+      const out = this.transactions.filter(t => String(t['Type(IN/OUT/ADJ)']).toUpperCase() === 'OUT');
+      if (!out.length) {
+        this.toast('No data', 'ไม่มีรายการ OUT ตามเงื่อนไข');
+        return;
+      }
+
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation: 'p', unit: 'pt', format: 'a4' });
+
+      const title = 'Withdrawal Summary (OUT)';
+      const meta = `Generated: ${new Date().toLocaleString()} | Staff: ${this.user.staffId}`;
+
+      doc.setFontSize(14);
+      doc.text(title, 40, 40);
+      doc.setFontSize(10);
+      doc.text(meta, 40, 58);
+
+      const rows = out.map(t => ([
+        this.fmtTime(t.Timestamp),
+        String(t.ItemName||''),
+        String(t.Qty||''),
+        String(t.Unit||''),
+        String(t.Note||''),
+        String(t.RefNo||'')
+      ]));
+
+      doc.autoTable({
+        head: [['Time','Item','Qty','Unit','Note','Ref']],
+        body: rows,
+        startY: 75,
+        styles: { fontSize: 9, cellPadding: 4 },
+        headStyles: { fillColor: [30,41,59] }
+      });
+
+      doc.save('withdrawal_out_summary.pdf');
+      this.toast('PDF', 'ดาวน์โหลดไฟล์ PDF แล้ว');
+    },
+
+    async runMinStock() {
+      this.busy = true;
+      try {
+        await this.apiPost({ action: 'runMinStock', token: this.token });
+        this.toast('Done', 'สั่งส่ง Email Minimum stock แล้ว (ถ้ามีรายการต่ำกว่า Minimum)');
+      } catch (e) {
+        this.toast('Error', e.message || String(e));
+      } finally {
+        this.busy = false;
+      }
+    }
+  }
+}
+</script>
+
+</body>
+</html>
