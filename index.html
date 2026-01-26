@@ -15,10 +15,10 @@
   <!-- Central CSS -->
   <style>
     :root{
-      --logo-size: 100px;
-      --item-img-table: 120px;
-      --item-img-mobile: 144px;
-      --item-img-form: 100px;
+      --logo-size: 120px;
+      --item-img-table: 144px;
+      --item-img-mobile: 152px;
+      --item-img-form: 156px;
     }
 
     .imgbox { width: var(--img-size); height: var(--img-size); }
@@ -43,8 +43,7 @@
             src="https://lh3.googleusercontent.com/d/1r7PM1ogHIbxskvcauVIYaQOfSHXWGncO=w240"
             alt="Logo"
             class="imgfit-contain"
-            referrerpolicy="no-referrer"
-            @error="$event.target.src='https://lh5.googleusercontent.com/d/1r7PM1ogHIbxskvcauVIYaQOfSHXWGncO'">
+            @error="$event.target.src='https://lh5.googleusercontent.com/d/1r7PM1ogHIbxskvcauVIYaQOfSHXWGncO=w240'">
         </div>
         <div>
           <div class="font-semibold leading-tight">Inventory</div>
@@ -184,7 +183,6 @@
                     <div class="imgbox imgbox-item-table rounded-xl overflow-hidden bg-slate-100 border border-slate-200 flex items-center justify-center">
                       <img :src="imgSrc(it.imageUrl, 240)"
                            class="imgfit-contain"
-                           referrerpolicy="no-referrer"
                            @error="onImgError($event)">
                     </div>
                   </td>
@@ -214,7 +212,6 @@
                 <div class="imgbox imgbox-item-mobile rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 flex items-center justify-center">
                   <img :src="imgSrc(it.imageUrl, 240)"
                        class="imgfit-contain"
-                       referrerpolicy="no-referrer"
                        @error="onImgError($event)">
                 </div>
                 <div class="flex-1">
@@ -442,7 +439,6 @@
             <div class="imgbox imgbox-item-form rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 flex items-center justify-center">
               <img :src="imgSrc(itemForm.imageUrl, 240)"
                    class="imgfit-contain"
-                   referrerpolicy="no-referrer"
                    @error="onImgError($event)">
             </div>
             <button class="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed"
@@ -503,7 +499,6 @@
                       <div class="imgbox imgbox-item-form rounded-xl overflow-hidden bg-slate-100 border border-slate-200 flex items-center justify-center">
                         <img :src="imgSrc(it.imageUrl, 240)"
                              class="imgfit-contain"
-                             referrerpolicy="no-referrer"
                              @error="onImgError($event)">
                       </div>
                       <input class="w-80 min-w-[14rem] px-2 py-1 rounded-lg border border-slate-200"
@@ -775,28 +770,27 @@ function app() {
       this.toast('Logout', 'ออกจากระบบแล้ว');
     },
 
-    // -------- Image URL Normalizer (Drive / googleusercontent / raw URL) --------
+    // -------- Image URL Normalizer (NO drive.google.com calls) --------
     extractDriveFileId(url) {
       const s = String(url || '').trim();
       if (!s) return '';
 
+      // 1) drive share link: /file/d/<id>/
       let m = s.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/i);
       if (m && m[1]) return m[1];
 
+      // 2) googleusercontent: /d/<id>
       m = s.match(/googleusercontent\.com\/d\/([a-zA-Z0-9_-]+)/i);
       if (m && m[1]) return m[1];
 
+      // 3) uc?export=view&id=<id> (บางคนเคยใส่มา)
       m = s.match(/[?&]id=([a-zA-Z0-9_-]+)/i);
       if (m && m[1]) return m[1];
 
-      if (/^[a-zA-Z0-9_-]{20,}$/.test(s)) return s; // user pasted only the ID
+      // 4) user pasted only the ID
+      if (/^[a-zA-Z0-9_-]{20,}$/.test(s)) return s;
 
       return '';
-    },
-
-    transparentPixelDataUrl() {
-      // 1x1 transparent GIF
-      return "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
     },
 
     placeholderDataUrl() {
@@ -808,15 +802,28 @@ function app() {
       return "data:image/svg+xml;utf8," + encodeURIComponent(svg);
     },
 
+    /**
+     * IMPORTANT FIX:
+     * - Never generate drive.google.com/uc URL (blocked by proxy; shown in your screenshot)
+     * - Prefer lh5.googleusercontent.com which serves actual image bytes
+     * - If user input is already lh3/lh5 -> use directly and append =w<size> if missing
+     * - If user input is drive share -> convert to lh5 googleusercontent
+     */
     imgSrc(inputUrl, size = 240) {
       const raw = String(inputUrl || '').trim();
-      if (!raw) return this.transparentPixelDataUrl();
+      if (!raw) return this.placeholderDataUrl();
 
+      // If already googleusercontent direct, use it (append size if missing)
+      if (/^https?:\/\/lh\d\.googleusercontent\.com\/d\//i.test(raw)) {
+        return raw.includes('=w') ? raw : `${raw}=w${size}`;
+      }
+
+      // Convert drive share link (or anything with fileId) -> lh5 googleusercontent
       const id = this.extractDriveFileId(raw);
-      if (!id) return raw; // normal URL (not Drive)
+      if (id) return `https://lh5.googleusercontent.com/d/${id}=w${size}`;
 
-      // Most reliable hotlink when file is shared "Anyone with the link"
-      return `https://drive.google.com/uc?export=view&id=${id}`;
+      // Otherwise use as-is (non-drive image URL)
+      return raw;
     },
 
     onImgError(ev) {
@@ -951,7 +958,7 @@ function app() {
             qty: Number(form.qty),
             department: (type === 'OUT') ? (form.department || '') : '',
             note: form.note || '',
-            refNo: '' // OUT auto
+            refNo: ''
           }
         });
 
@@ -985,7 +992,6 @@ function app() {
         return;
       }
 
-      // client-side duplicate guard (server will guard too)
       const exists = (this.items || []).some(it =>
         String(it.itemName||'').trim().toLowerCase() === name.toLowerCase() &&
         String(it.unit||'').trim().toLowerCase() === unit.toLowerCase()
@@ -1001,7 +1007,7 @@ function app() {
           action: 'addItem',
           token: this.token,
           item: {
-            itemCode: '', // generated by server
+            itemCode: '',
             itemName: name,
             unit: unit,
             minimum: Number(this.itemForm.minimum || 0),
@@ -1021,7 +1027,6 @@ function app() {
       }
     },
 
-    // Database Items
     async openDbItems() {
       this.tab = 'dbitems';
       if (!this.isAdmin) return;
@@ -1071,7 +1076,7 @@ function app() {
           }
         });
         this.toast('Saved', 'อัปเดต Item แล้ว');
-        await this.loadAll(); // refresh items + tx
+        await this.loadAll();
       } catch (e) {
         this.toast('Error', e.message || String(e));
       } finally {
@@ -1080,7 +1085,6 @@ function app() {
       }
     },
 
-    // Users
     async openUsers() {
       this.tab = 'users';
       if (!this.isAdmin) return;
@@ -1127,7 +1131,7 @@ function app() {
             fullName: String(u.fullName || '').trim(),
             role: String(u.role || 'User').trim(),
             isActive: (String(u.isActive).toUpperCase()==='N') ? 'N' : 'Y',
-            password: password // optional on update
+            password: password
           }
         });
 
@@ -1166,7 +1170,6 @@ function app() {
       return d.toLocaleString();
     },
 
-    // OUT Summary PDF (correct mapping)
     downloadOutSummaryPdf() {
       try {
         const { jsPDF } = window.jspdf;
@@ -1235,5 +1238,6 @@ function app() {
     z-index: 9999;
   "
 >
+
 </body>
 </html>
