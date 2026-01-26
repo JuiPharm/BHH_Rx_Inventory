@@ -15,10 +15,10 @@
   <!-- Central CSS -->
   <style>
     :root{
-      --logo-size: 100px;
-      --item-img-table: 144px;
-      --item-img-mobile: 152px;
-      --item-img-form: 144px;
+      --logo-size: 44px;
+      --item-img-table: 44px;
+      --item-img-mobile: 52px;
+      --item-img-form: 56px;
     }
 
     .imgbox { width: var(--img-size); height: var(--img-size); }
@@ -58,7 +58,8 @@
           <span class="text-slate-400">•</span>
           <span class="uppercase text-xs px-2 py-1 rounded-full bg-slate-100 border border-slate-200" x-text="user?.role || ''"></span>
         </div>
-        <button class="px-3 py-2 rounded-xl bg-slate-900 text-white text-sm hover:bg-slate-800"
+        <button class="px-3 py-2 rounded-xl bg-slate-900 text-white text-sm hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed"
+                :disabled="busy"
                 @click="logout()">Logout</button>
       </div>
     </div>
@@ -95,7 +96,7 @@
                    x-model="loginForm.password" autocomplete="current-password">
           </div>
 
-          <button class="w-full px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800"
+          <button class="w-full px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed"
                   :disabled="busy"
                   @click="login()">
             <span x-text="busy ? 'Signing in...' : 'Sign in'"></span>
@@ -157,7 +158,7 @@
           <div class="flex gap-2">
             <input class="w-full md:w-80 px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900"
                    x-model="inventorySearch">
-            <button class="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800"
+            <button class="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed"
                     :disabled="busy"
                     @click="loadAll()">Refresh</button>
           </div>
@@ -181,7 +182,10 @@
                 <tr class="border-t border-slate-100">
                   <td class="py-2">
                     <div class="imgbox imgbox-item-table rounded-xl overflow-hidden bg-slate-100 border border-slate-200 flex items-center justify-center">
-                      <img :src="it.imageUrl" class="imgfit-contain" referrerpolicy="no-referrer" @error="$event.target.style.display='none'">
+                      <img :src="imgSrc(it.imageUrl, 240)"
+                           class="imgfit-contain"
+                           referrerpolicy="no-referrer"
+                           @error="onImgError($event)">
                     </div>
                   </td>
                   <td class="py-2">
@@ -208,7 +212,10 @@
             <div class="p-4 rounded-2xl border border-slate-200">
               <div class="flex gap-3">
                 <div class="imgbox imgbox-item-mobile rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 flex items-center justify-center">
-                  <img :src="it.imageUrl" class="imgfit-contain" referrerpolicy="no-referrer" @error="$event.target.style.display='none'">
+                  <img :src="imgSrc(it.imageUrl, 240)"
+                       class="imgfit-contain"
+                       referrerpolicy="no-referrer"
+                       @error="onImgError($event)">
                 </div>
                 <div class="flex-1">
                   <div class="font-semibold" x-text="it.itemName"></div>
@@ -259,10 +266,10 @@
               <option value="ADJ">ADJ</option>
             </select>
             <input class="px-3 py-2 rounded-xl border border-slate-200" x-model="txFilter.q">
-            <button class="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800"
+            <button class="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed"
                     :disabled="busy"
                     @click="loadTransactions()">Apply</button>
-            <button class="px-4 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50"
+            <button class="px-4 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed"
                     :disabled="busy"
                     @click="downloadOutSummaryPdf()">Download OUT PDF</button>
           </div>
@@ -343,7 +350,7 @@
         </div>
 
         <div class="mt-4">
-          <button class="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800"
+          <button class="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed"
                   :disabled="busy"
                   @click="submitTx('IN')">Save IN</button>
         </div>
@@ -399,7 +406,7 @@
         </div>
 
         <div class="mt-4">
-          <button class="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800"
+          <button class="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed"
                   :disabled="busy"
                   @click="submitTx('OUT')">Save OUT (Send Email)</button>
         </div>
@@ -433,9 +440,12 @@
           </div>
           <div class="lg:col-span-2 flex items-end gap-3">
             <div class="imgbox imgbox-item-form rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 flex items-center justify-center">
-              <img :src="itemForm.imageUrl" class="imgfit-contain" referrerpolicy="no-referrer" @error="$event.target.style.display='none'">
+              <img :src="imgSrc(itemForm.imageUrl, 240)"
+                   class="imgfit-contain"
+                   referrerpolicy="no-referrer"
+                   @error="onImgError($event)">
             </div>
-            <button class="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800"
+            <button class="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed"
                     :disabled="busy"
                     @click="saveItem()">Save Item</button>
           </div>
@@ -453,7 +463,7 @@
           <div class="flex gap-2 w-full md:w-auto">
             <input class="w-full md:w-80 px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900"
                    x-model="dbSearch">
-            <button class="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800"
+            <button class="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed"
                     :disabled="busy"
                     @click="loadItemsDb()">Refresh</button>
           </div>
@@ -491,7 +501,10 @@
                   <td class="py-2">
                     <div class="flex items-center gap-2">
                       <div class="imgbox imgbox-item-form rounded-xl overflow-hidden bg-slate-100 border border-slate-200 flex items-center justify-center">
-                        <img :src="it.imageUrl" class="imgfit-contain" referrerpolicy="no-referrer" @error="$event.target.style.display='none'">
+                        <img :src="imgSrc(it.imageUrl, 240)"
+                             class="imgfit-contain"
+                             referrerpolicy="no-referrer"
+                             @error="onImgError($event)">
                       </div>
                       <input class="w-80 min-w-[14rem] px-2 py-1 rounded-lg border border-slate-200"
                              x-model="it.imageUrl"
@@ -504,10 +517,18 @@
                            @change="it.isActive = $event.target.checked ? 'Y' : 'N'">
                   </td>
                   <td class="py-2 text-right">
-                    <button class="px-3 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800"
-                            :disabled="busy"
+                    <button class="px-3 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed"
+                            :disabled="busy || it._saving"
                             @click="saveDbItem(it)">
-                      Save
+                      <span class="inline-flex items-center gap-2">
+                        <template x-if="it._saving">
+                          <svg class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="4"></path>
+                          </svg>
+                        </template>
+                        <span x-text="it._saving ? 'Saving...' : 'Save'"></span>
+                      </span>
                     </button>
                   </td>
                 </tr>
@@ -528,7 +549,7 @@
           <div class="flex gap-2 w-full md:w-auto">
             <input class="w-full md:w-80 px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900"
                    x-model="userSearch">
-            <button class="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800"
+            <button class="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed"
                     :disabled="busy"
                     @click="loadUsers()">Refresh</button>
           </div>
@@ -564,7 +585,7 @@
               <input type="password" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200" x-model="newUser.password">
             </div>
             <div class="md:col-span-6">
-              <button class="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800"
+              <button class="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed"
                       :disabled="busy"
                       @click="saveUser(newUser, true)">
                 Save User
@@ -612,7 +633,7 @@
                            x-model="u._newPassword">
                   </td>
                   <td class="py-2 text-right">
-                    <button class="px-3 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800"
+                    <button class="px-3 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed"
                             :disabled="busy"
                             @click="saveUser(u, false)">
                       Save
@@ -639,7 +660,7 @@
               ใช้ Rebuild เมื่อมีการแก้ Transactions ใน Google Sheet ด้วยมือ
             </div>
             <div class="mt-3 flex gap-2">
-              <button class="px-4 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50"
+              <button class="px-4 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed"
                       :disabled="busy"
                       @click="rebuildInventory()">Rebuild Inventory</button>
             </div>
@@ -752,6 +773,57 @@ function app() {
       this.itemsDb = [];
       this.users = [];
       this.toast('Logout', 'ออกจากระบบแล้ว');
+    },
+
+    // -------- Image URL Normalizer (Drive / googleusercontent / raw URL) --------
+    extractDriveFileId(url) {
+      const s = String(url || '').trim();
+      if (!s) return '';
+
+      let m = s.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/i);
+      if (m && m[1]) return m[1];
+
+      m = s.match(/googleusercontent\.com\/d\/([a-zA-Z0-9_-]+)/i);
+      if (m && m[1]) return m[1];
+
+      m = s.match(/[?&]id=([a-zA-Z0-9_-]+)/i);
+      if (m && m[1]) return m[1];
+
+      if (/^[a-zA-Z0-9_-]{20,}$/.test(s)) return s; // user pasted only the ID
+
+      return '';
+    },
+
+    transparentPixelDataUrl() {
+      // 1x1 transparent GIF
+      return "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
+    },
+
+    placeholderDataUrl() {
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="160" height="120">
+        <rect width="100%" height="100%" fill="#e2e8f0"/>
+        <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle"
+          fill="#64748b" font-size="12" font-family="Arial">NO IMAGE</text>
+      </svg>`;
+      return "data:image/svg+xml;utf8," + encodeURIComponent(svg);
+    },
+
+    imgSrc(inputUrl, size = 240) {
+      const raw = String(inputUrl || '').trim();
+      if (!raw) return this.transparentPixelDataUrl();
+
+      const id = this.extractDriveFileId(raw);
+      if (!id) return raw; // normal URL (not Drive)
+
+      // Most reliable hotlink when file is shared "Anyone with the link"
+      return `https://drive.google.com/uc?export=view&id=${id}`;
+    },
+
+    onImgError(ev) {
+      try {
+        ev.target.onerror = null;
+        ev.target.src = this.placeholderDataUrl();
+      } catch (e) {}
     },
 
     async login() {
@@ -960,7 +1032,7 @@ function app() {
       this.busy = true;
       try {
         const data = await this.apiGet('itemsdb');
-        this.itemsDb = Array.isArray(data) ? data : [];
+        this.itemsDb = (Array.isArray(data) ? data : []).map(x => ({ ...x, _saving: false }));
         this.toast('Loaded', 'ดึงข้อมูล Items (DB) แล้ว');
       } catch (e) {
         this.toast('Error', e.message || String(e));
@@ -983,6 +1055,7 @@ function app() {
       const unit = String(it.unit || '').trim();
       if (!name || !unit) { this.toast('Error','ItemName/Unit required'); return; }
 
+      it._saving = true;
       this.busy = true;
       try {
         await this.apiPost({
@@ -990,8 +1063,8 @@ function app() {
           token: this.token,
           item: {
             itemId: it.itemId,
-            itemName: name,                 // IMPORTANT: requires Code.gs update
-            unit: unit,                     // IMPORTANT: requires Code.gs update
+            itemName: name,
+            unit: unit,
             minimum: Number(it.minimum || 0),
             imageUrl: it.imageUrl || '',
             isActive: (String(it.isActive).toUpperCase() === 'N') ? 'N' : 'Y'
@@ -1003,6 +1076,7 @@ function app() {
         this.toast('Error', e.message || String(e));
       } finally {
         this.busy = false;
+        it._saving = false;
       }
     },
 
@@ -1092,7 +1166,7 @@ function app() {
       return d.toLocaleString();
     },
 
-    // FIX: OUT Summary PDF (map fields correctly)
+    // OUT Summary PDF (correct mapping)
     downloadOutSummaryPdf() {
       try {
         const { jsPDF } = window.jspdf;
@@ -1121,7 +1195,7 @@ function app() {
             String(t.Qty ?? ''),
             String(t.Unit ?? ''),
             String(t.Note ?? ''),
-            String(t.RefNo || '-')   // IMPORTANT
+            String(t.RefNo || '-')
           ];
         });
 
@@ -1140,6 +1214,25 @@ function app() {
   }
 }
 </script>
-
+<img
+  src="https://lh5.googleusercontent.com/d/19HzXxUM02LWnKczcG2YoKuvshEh5-nlU" alt="Gemini Generated Image 46tguk46tguk46tg
+"
+  alt="badge"
+  loading="lazy"
+  decoding="async"
+  style="
+    position: fixed;
+    right: 16px;
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    width: clamp(90px, 14vw, 140px);
+    height: auto;
+    border: 0;
+    border-radius: 12px;
+    box-shadow: 0 6px 18px rgba(0,0,0,.18);
+    object-fit: contain;
+    pointer-events: none;
+    z-index: 9999;
+  "
+>
 </body>
 </html>
