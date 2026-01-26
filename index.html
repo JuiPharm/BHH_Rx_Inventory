@@ -8,13 +8,17 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 
-  <!-- Central CSS (single-point size control) -->
+  <!-- PDF (client-side summary download) -->
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.5.31/dist/jspdf.plugin.autotable.min.js"></script>
+
+  <!-- Central CSS -->
   <style>
     :root{
-      --logo-size: 144px;
+      --logo-size: 100px;
       --item-img-table: 144px;
       --item-img-mobile: 152px;
-      --item-img-form: 156px;
+      --item-img-form: 144px;
     }
 
     .imgbox { width: var(--img-size); height: var(--img-size); }
@@ -23,7 +27,7 @@
     .imgbox-item-mobile { --img-size: var(--item-img-mobile); }
     .imgbox-item-form { --img-size: var(--item-img-form); }
 
-    /* ไม่ตัดภาพ */
+    /* do not crop image */
     .imgfit-contain { width: 100%; height: 100%; object-fit: contain; }
   </style>
 </head>
@@ -50,9 +54,9 @@
 
       <div class="flex items-center gap-2" x-show="isAuthed">
         <div class="text-sm text-slate-600">
-          <span class="font-medium" x-text="user.fullName || user.staffId"></span>
+          <span class="font-medium" x-text="user?.fullName || user?.staffId || ''"></span>
           <span class="text-slate-400">•</span>
-          <span class="uppercase text-xs px-2 py-1 rounded-full bg-slate-100 border border-slate-200" x-text="user.role"></span>
+          <span class="uppercase text-xs px-2 py-1 rounded-full bg-slate-100 border border-slate-200" x-text="user?.role || ''"></span>
         </div>
         <button class="px-3 py-2 rounded-xl bg-slate-900 text-white text-sm hover:bg-slate-800"
                 @click="logout()">Logout</button>
@@ -60,7 +64,6 @@
     </div>
   </div>
 
-  <!-- Main -->
   <div class="max-w-7xl mx-auto px-4 py-6">
 
     <!-- Toast -->
@@ -149,7 +152,7 @@
         <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div>
             <div class="text-lg font-semibold">Stock คงเหลือ</div>
-            <div class="text-sm text-slate-500">แสดง: ชื่อ Item, จำนวนคงเหลือ, หน่วย (รวมรายการซ้ำแล้ว)</div>
+            <div class="text-sm text-slate-500">ชื่อ Item, จำนวนคงเหลือ, หน่วย (รวมรายการซ้ำแล้ว)</div>
           </div>
           <div class="flex gap-2">
             <input class="w-full md:w-80 px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900"
@@ -178,7 +181,7 @@
                 <tr class="border-t border-slate-100">
                   <td class="py-2">
                     <div class="imgbox imgbox-item-table rounded-xl overflow-hidden bg-slate-100 border border-slate-200 flex items-center justify-center">
-                      <img :src="it.imageUrl" class="imgfit-contain" @error="$event.target.style.display='none'">
+                      <img :src="it.imageUrl" class="imgfit-contain" referrerpolicy="no-referrer" @error="$event.target.style.display='none'">
                     </div>
                   </td>
                   <td class="py-2">
@@ -205,7 +208,7 @@
             <div class="p-4 rounded-2xl border border-slate-200">
               <div class="flex gap-3">
                 <div class="imgbox imgbox-item-mobile rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 flex items-center justify-center">
-                  <img :src="it.imageUrl" class="imgfit-contain" @error="$event.target.style.display='none'">
+                  <img :src="it.imageUrl" class="imgfit-contain" referrerpolicy="no-referrer" @error="$event.target.style.display='none'">
                 </div>
                 <div class="flex-1">
                   <div class="font-semibold" x-text="it.itemName"></div>
@@ -244,7 +247,7 @@
             <div class="text-sm text-slate-500">ดูประวัติรับเข้า/เบิก/ปรับยอด</div>
           </div>
 
-          <div class="grid grid-cols-2 lg:grid-cols-5 gap-2 w-full lg:w-auto">
+          <div class="grid grid-cols-2 lg:grid-cols-6 gap-2 w-full lg:w-auto">
             <input type="date" class="px-3 py-2 rounded-xl border border-slate-200"
                    x-model="txFilter.from">
             <input type="date" class="px-3 py-2 rounded-xl border border-slate-200"
@@ -259,6 +262,9 @@
             <button class="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800"
                     :disabled="busy"
                     @click="loadTransactions()">Apply</button>
+            <button class="px-4 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50"
+                    :disabled="busy"
+                    @click="downloadOutSummaryPdf()">Download OUT PDF</button>
           </div>
         </div>
 
@@ -402,13 +408,9 @@
       <!-- New Item (Admin) -->
       <section x-show="tab==='newitem'" class="bg-white border border-slate-200 rounded-3xl shadow-sm p-5">
         <div class="text-lg font-semibold">New Item — Admin only</div>
-        <div class="text-sm text-slate-500 mt-1">หากไม่กรอก ItemCode ระบบจะ Generate ให้</div>
+        <div class="text-sm text-slate-500 mt-1">ItemCode ระบบ Generate ให้อัตโนมัติ</div>
 
         <div class="mt-4 grid grid-cols-1 lg:grid-cols-6 gap-3">
-          <div class="lg:col-span-2">
-            <label class="text-xs text-slate-600">ItemCode</label>
-            <input class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200" x-model="itemForm.itemCode">
-          </div>
           <div class="lg:col-span-2">
             <label class="text-xs text-slate-600">ItemName *</label>
             <input class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200" x-model="itemForm.itemName">
@@ -425,11 +427,13 @@
 
           <div class="lg:col-span-4">
             <label class="text-xs text-slate-600">ImageURL</label>
-            <input class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200" x-model="itemForm.imageUrl">
+            <input class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200"
+                   x-model="itemForm.imageUrl"
+                   placeholder="สำหรับใส่ image URL">
           </div>
           <div class="lg:col-span-2 flex items-end gap-3">
             <div class="imgbox imgbox-item-form rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 flex items-center justify-center">
-              <img :src="itemForm.imageUrl" class="imgfit-contain" @error="$event.target.style.display='none'">
+              <img :src="itemForm.imageUrl" class="imgfit-contain" referrerpolicy="no-referrer" @error="$event.target.style.display='none'">
             </div>
             <button class="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800"
                     :disabled="busy"
@@ -443,7 +447,7 @@
         <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
           <div>
             <div class="text-lg font-semibold">Database Items — Admin only</div>
-            <div class="text-sm text-slate-500 mt-1">แก้ Minimum / รูป / สถานะ แล้ว Save (real-time)</div>
+            <div class="text-sm text-slate-500 mt-1">แก้ชื่อ/หน่วย/Minimum/รูป/สถานะ แล้ว Save (real-time)</div>
           </div>
 
           <div class="flex gap-2 w-full md:w-auto">
@@ -471,10 +475,14 @@
               <template x-for="it in filteredDbItems()" :key="it.itemId">
                 <tr class="border-t border-slate-100 align-top">
                   <td class="py-2">
-                    <div class="font-medium" x-text="it.itemName"></div>
-                    <div class="text-xs text-slate-500" x-text="it.itemCode"></div>
+                    <input class="w-80 px-2 py-1 rounded-lg border border-slate-200"
+                           x-model="it.itemName">
+                    <div class="text-xs text-slate-500 mt-1" x-text="it.itemCode"></div>
                   </td>
-                  <td class="py-2" x-text="it.unit"></td>
+                  <td class="py-2">
+                    <input class="w-40 px-2 py-1 rounded-lg border border-slate-200"
+                           x-model="it.unit">
+                  </td>
                   <td class="py-2 text-right">
                     <input type="number" min="0" step="0.01"
                            class="w-28 px-2 py-1 rounded-lg border border-slate-200 text-right"
@@ -483,14 +491,16 @@
                   <td class="py-2">
                     <div class="flex items-center gap-2">
                       <div class="imgbox imgbox-item-form rounded-xl overflow-hidden bg-slate-100 border border-slate-200 flex items-center justify-center">
-                        <img :src="it.imageUrl" class="imgfit-contain" @error="$event.target.style.display='none'">
+                        <img :src="it.imageUrl" class="imgfit-contain" referrerpolicy="no-referrer" @error="$event.target.style.display='none'">
                       </div>
                       <input class="w-80 min-w-[14rem] px-2 py-1 rounded-lg border border-slate-200"
-                             x-model="it.imageUrl">
+                             x-model="it.imageUrl"
+                             placeholder="สำหรับใส่ image URL">
                     </div>
                   </td>
                   <td class="py-2 text-center">
-                    <input type="checkbox" class="w-5 h-5" :checked="String(it.isActive).toUpperCase()!=='N'"
+                    <input type="checkbox" class="w-5 h-5"
+                           :checked="String(it.isActive).toUpperCase()!=='N'"
                            @change="it.isActive = $event.target.checked ? 'Y' : 'N'">
                   </td>
                   <td class="py-2 text-right">
@@ -524,7 +534,6 @@
           </div>
         </div>
 
-        <!-- Add user -->
         <div class="mt-4 p-4 rounded-2xl border border-slate-200 bg-slate-50">
           <div class="text-sm font-semibold">Add / Upsert User</div>
           <div class="mt-3 grid grid-cols-1 md:grid-cols-6 gap-2">
@@ -561,13 +570,12 @@
                 Save User
               </button>
               <div class="text-xs text-slate-500 mt-2">
-                หมายเหตุ: ถ้า StaffID มีอยู่แล้ว จะอัปเดตข้อมูล; ถ้าเป็น user ใหม่ต้องใส่ Password
+                ถ้า StaffID มีอยู่แล้วจะอัปเดต; ถ้าเป็น user ใหม่ต้องใส่ Password
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Users table -->
         <div class="mt-4 overflow-x-auto">
           <table class="w-full text-sm">
             <thead>
@@ -621,7 +629,7 @@
       <section x-show="tab==='settings'" class="bg-white border border-slate-200 rounded-3xl shadow-sm p-5">
         <div class="text-lg font-semibold">Settings</div>
         <div class="text-sm text-slate-500 mt-1">
-          การตั้งค่า Email minimum stock อยู่ในชีต Config
+          การตั้งค่า email minimum stock อยู่ในชีต Config
         </div>
 
         <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -632,6 +640,7 @@
             </div>
             <div class="mt-3 flex gap-2">
               <button class="px-4 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50"
+                      :disabled="busy"
                       @click="rebuildInventory()">Rebuild Inventory</button>
             </div>
           </div>
@@ -639,7 +648,7 @@
           <div class="p-4 rounded-2xl border border-slate-200 bg-slate-50">
             <div class="text-sm font-medium">Security note</div>
             <div class="text-xs text-slate-600 mt-1">
-              GitHub Pages เป็น public static site; session token เก็บในเครื่องผู้ใช้ และมี auto logout เมื่อ idle 30 นาที
+              Token เก็บในเครื่องผู้ใช้ และ auto logout เมื่อ idle 30 นาที
             </div>
           </div>
         </div>
@@ -671,11 +680,9 @@ function app() {
     transactions: [],
     txFilter: { from: '', to: '', type: '', q: '' },
 
-    // Items DB
     itemsDb: [],
     dbSearch: '',
 
-    // Users admin
     users: [],
     userSearch: '',
     newUser: { staffId:'', fullName:'', role:'User', isActive:'Y', password:'' },
@@ -685,13 +692,14 @@ function app() {
     txFormIn: { itemSearch: '', itemKey: '', qty: 1, note: '' },
     txFormOut: { itemSearch: '', itemKey: '', qty: 1, department: 'OPD Pharmacy', note: '' },
 
-    itemForm: { itemCode: '', itemName: '', unit: '', minimum: 0, imageUrl: '' },
+    // New item: no itemCode
+    itemForm: { itemName: '', unit: '', minimum: 0, imageUrl: '' },
 
     get isAuthed() { return !!this.token && !!this.user; },
     get isAdmin() { return this.user && String(this.user.role).toLowerCase() === 'admin'; },
 
     init() {
-      if (this.isAuthed && this.API_URL && this.API_URL.startsWith('http')) {
+      if (this.isAuthed) {
         this.setupIdleLogout();
         this.loadAll();
       }
@@ -703,9 +711,7 @@ function app() {
       setTimeout(()=> this.toasts = this.toasts.filter(x=>x.id!==id), 3500);
     },
 
-    markActive() {
-      localStorage.setItem(this.lastActiveKey, String(Date.now()));
-    },
+    markActive() { localStorage.setItem(this.lastActiveKey, String(Date.now())); },
 
     setupIdleLogout() {
       const last = Number(localStorage.getItem(this.lastActiveKey) || '0');
@@ -796,7 +802,6 @@ function app() {
 
     async apiPost(payload) {
       this.markActive();
-
       const res = await fetch(this.API_URL, { method: 'POST', body: JSON.stringify(payload) });
       const json = await res.json();
       if (!json.ok) throw new Error(json.error || 'API error');
@@ -901,26 +906,40 @@ function app() {
     },
 
     async saveItem() {
-      if (!this.itemForm.itemName || !this.itemForm.unit) {
+      const name = String(this.itemForm.itemName || '').trim();
+      const unit = String(this.itemForm.unit || '').trim();
+      if (!name || !unit) {
         this.toast('Error', 'ต้องมี ItemName และ Unit');
         return;
       }
+
+      // client-side duplicate guard (server will guard too)
+      const exists = (this.items || []).some(it =>
+        String(it.itemName||'').trim().toLowerCase() === name.toLowerCase() &&
+        String(it.unit||'').trim().toLowerCase() === unit.toLowerCase()
+      );
+      if (exists) {
+        this.toast('Duplicate', 'มี Item นี้อยู่แล้ว กรุณาไปแก้ไขที่ Database Items');
+        return;
+      }
+
       this.busy = true;
       try {
         const res = await this.apiPost({
           action: 'addItem',
           token: this.token,
           item: {
-            itemCode: this.itemForm.itemCode || '', // ถ้าว่าง ระบบ generate
-            itemName: this.itemForm.itemName,
-            unit: this.itemForm.unit,
+            itemCode: '', // generated by server
+            itemName: name,
+            unit: unit,
             minimum: Number(this.itemForm.minimum || 0),
             imageUrl: this.itemForm.imageUrl || '',
             isActive: 'Y'
           }
         });
+
         this.toast('Saved', `เพิ่ม Item สำเร็จ (${res.itemCode || 'generated'})`);
-        this.itemForm = { itemCode:'', itemName:'', unit:'', minimum:0, imageUrl:'' };
+        this.itemForm = { itemName:'', unit:'', minimum:0, imageUrl:'' };
         await this.loadItems();
         this.tab = 'inventory';
       } catch (e) {
@@ -930,7 +949,7 @@ function app() {
       }
     },
 
-    // DB Items
+    // Database Items
     async openDbItems() {
       this.tab = 'dbitems';
       if (!this.isAdmin) return;
@@ -960,6 +979,10 @@ function app() {
     },
 
     async saveDbItem(it) {
+      const name = String(it.itemName || '').trim();
+      const unit = String(it.unit || '').trim();
+      if (!name || !unit) { this.toast('Error','ItemName/Unit required'); return; }
+
       this.busy = true;
       try {
         await this.apiPost({
@@ -967,13 +990,15 @@ function app() {
           token: this.token,
           item: {
             itemId: it.itemId,
+            itemName: name,                 // IMPORTANT: requires Code.gs update
+            unit: unit,                     // IMPORTANT: requires Code.gs update
             minimum: Number(it.minimum || 0),
             imageUrl: it.imageUrl || '',
             isActive: (String(it.isActive).toUpperCase() === 'N') ? 'N' : 'Y'
           }
         });
         this.toast('Saved', 'อัปเดต Item แล้ว');
-        await this.loadItems();
+        await this.loadAll(); // refresh items + tx
       } catch (e) {
         this.toast('Error', e.message || String(e));
       } finally {
@@ -1016,7 +1041,6 @@ function app() {
       const staffId = String(u.staffId || '').trim();
       if (!staffId) { this.toast('Error','StaffID required'); return; }
 
-      // For existing rows: password optional
       const password = fromNewForm ? String(u.password || '').trim() : String(u._newPassword || '').trim();
 
       this.busy = true;
@@ -1033,10 +1057,8 @@ function app() {
           }
         });
 
-        if (res.created) this.toast('Saved', `สร้างผู้ใช้ ${staffId} แล้ว`);
-        else this.toast('Saved', `อัปเดตผู้ใช้ ${staffId} แล้ว`);
+        this.toast('Saved', res.created ? `สร้างผู้ใช้ ${staffId} แล้ว` : `อัปเดตผู้ใช้ ${staffId} แล้ว`);
 
-        // Reset form and refresh list
         if (fromNewForm) {
           this.newUser = { staffId:'', fullName:'', role:'User', isActive:'Y', password:'' };
         } else {
@@ -1068,6 +1090,52 @@ function app() {
       const d = new Date(v);
       if (isNaN(d.getTime())) return String(v);
       return d.toLocaleString();
+    },
+
+    // FIX: OUT Summary PDF (map fields correctly)
+    downloadOutSummaryPdf() {
+      try {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+
+        const createdAt = new Date();
+        const staff = (this.user && this.user.staffId) ? this.user.staffId : '';
+
+        const out = (this.transactions || []).filter(t =>
+          String(t['Type(IN/OUT/ADJ)'] || '').toUpperCase() === 'OUT'
+        );
+
+        doc.setFontSize(18);
+        doc.text('Withdrawal Summary (OUT)', 40, 50);
+
+        doc.setFontSize(11);
+        doc.text(`Generated: ${createdAt.toLocaleString()} | Staff: ${staff}`, 40, 72);
+
+        const rows = out.map(t => {
+          const itemCode = String(t.ItemCode || '').trim();
+          const itemName = String(t.ItemName || '').trim();
+          const itemText = `${itemCode} ${itemName}`.trim();
+          return [
+            this.fmtTime(t.Timestamp),
+            itemText,
+            String(t.Qty ?? ''),
+            String(t.Unit ?? ''),
+            String(t.Note ?? ''),
+            String(t.RefNo || '-')   // IMPORTANT
+          ];
+        });
+
+        doc.autoTable({
+          head: [['Time', 'Item', 'Qty', 'Unit', 'Note', 'Ref']],
+          body: rows,
+          startY: 92,
+          styles: { fontSize: 10 }
+        });
+
+        doc.save(`withdrawal_summary_OUT_${createdAt.toISOString().slice(0,10)}.pdf`);
+      } catch (e) {
+        this.toast('PDF error', e.message || String(e));
+      }
     }
   }
 }
