@@ -3,31 +3,27 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Inventory Web App</title>
+  <title>BHH Inventory</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 
-  <!-- PDF (client-side summary download) -->
+  <!-- PDF -->
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.5.31/dist/jspdf.plugin.autotable.min.js"></script>
 
-  <!-- Central CSS -->
   <style>
     :root{
-      --logo-size: 120px;
-      --item-img-table: 144px;
-      --item-img-mobile: 152px;
-      --item-img-form: 156px;
+      --logo-size: 46px;
+      --item-img-table: 44px;
+      --item-img-mobile: 54px;
+      --item-img-form: 56px;
     }
-
     .imgbox { width: var(--img-size); height: var(--img-size); }
     .imgbox-logo { --img-size: var(--logo-size); }
     .imgbox-item-table { --img-size: var(--item-img-table); }
     .imgbox-item-mobile { --img-size: var(--item-img-mobile); }
     .imgbox-item-form { --img-size: var(--item-img-form); }
-
-    /* do not crop image */
     .imgfit-contain { width: 100%; height: 100%; object-fit: contain; }
   </style>
 </head>
@@ -38,15 +34,15 @@
   <div class="sticky top-0 z-30 backdrop-blur bg-white/80 border-b border-slate-200">
     <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
       <div class="flex items-center gap-3">
-        <div class="imgbox imgbox-logo rounded-2xl overflow-hidden bg-white border border-slate-200">
+        <div class="imgbox imgbox-logo rounded-2xl overflow-hidden bg-white border border-slate-200 flex items-center justify-center">
           <img
             src="https://lh3.googleusercontent.com/d/1r7PM1ogHIbxskvcauVIYaQOfSHXWGncO=w240"
-            alt="Logo"
             class="imgfit-contain"
+            alt="Logo"
             @error="$event.target.src='https://lh5.googleusercontent.com/d/1r7PM1ogHIbxskvcauVIYaQOfSHXWGncO=w240'">
         </div>
         <div>
-          <div class="font-semibold leading-tight">Inventory</div>
+          <div class="font-semibold leading-tight">BHH Inventory</div>
           <div class="text-xs text-slate-500">Google Sheets + Apps Script API</div>
         </div>
       </div>
@@ -65,7 +61,6 @@
   </div>
 
   <div class="max-w-7xl mx-auto px-4 py-6">
-
     <!-- Toast -->
     <div class="fixed bottom-4 right-4 z-50 space-y-2">
       <template x-for="t in toasts" :key="t.id">
@@ -80,7 +75,7 @@
     <div x-show="!isAuthed" class="min-h-[70vh] grid place-items-center">
       <div class="w-full max-w-md bg-white border border-slate-200 rounded-3xl shadow-sm p-6">
         <div class="text-xl font-semibold">Login</div>
-        <div class="text-sm text-slate-500 mt-1">ใช้ StaffID และ Password เพื่อเข้าสู่ระบบ</div>
+        <div class="text-sm text-slate-500 mt-1">ใช้ StaffID และ Password</div>
 
         <div class="mt-5 space-y-3">
           <div>
@@ -268,7 +263,33 @@
                     @click="loadTransactions()">Apply</button>
             <button class="px-4 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed"
                     :disabled="busy"
-                    @click="downloadOutSummaryPdf()">Download OUT PDF</button>
+                    @click="downloadOutSummaryPdf()">OUT Summary PDF</button>
+          </div>
+        </div>
+
+        <!-- Slip selector -->
+        <div class="mt-4 p-3 rounded-2xl border border-slate-200 bg-slate-50">
+          <div class="text-sm font-semibold">Download ใบเบิก (RefNo)</div>
+          <div class="text-xs text-slate-600 mt-1">เลือก RefNo ได้หลายใบ แล้ว Download PDF</div>
+
+          <div class="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2">
+            <select multiple size="4"
+                    class="w-full px-3 py-2 rounded-xl border border-slate-200"
+                    x-model="selectedRefNos">
+              <template x-for="s in outSlipOptions()" :key="s.refNo">
+                <option :value="s.refNo" x-text="s.refNo + ' • ' + s.department + ' • ' + s.count + ' item(s)'"></option>
+              </template>
+            </select>
+
+            <button class="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed"
+                    :disabled="busy || selectedRefNos.length===0"
+                    @click="downloadSelectedSlipsPdf()">
+              Download Selected Slip(s) PDF
+            </button>
+
+            <div class="text-xs text-slate-600 self-center">
+              PDF ใบเบิกจะสรุป: Department / Date / Issue By (StaffName) / Items (ชื่อ Item เท่านั้น)
+            </div>
           </div>
         </div>
 
@@ -282,7 +303,7 @@
                 <th class="text-right py-2">Qty</th>
                 <th class="text-left py-2">Unit</th>
                 <th class="text-left py-2">Dept</th>
-                <th class="text-left py-2">Staff</th>
+                <th class="text-left py-2">Issue By</th>
                 <th class="text-left py-2">Note</th>
                 <th class="text-left py-2">RefNo</th>
               </tr>
@@ -305,7 +326,7 @@
                   <td class="py-2 text-right font-semibold" x-text="t.Qty"></td>
                   <td class="py-2" x-text="t.Unit"></td>
                   <td class="py-2" x-text="t.Department"></td>
-                  <td class="py-2" x-text="t.StaffID"></td>
+                  <td class="py-2" x-text="t.StaffName || t.StaffID"></td>
                   <td class="py-2" x-text="t.Note"></td>
                   <td class="py-2" x-text="t.RefNo"></td>
                 </tr>
@@ -353,10 +374,12 @@
         </div>
       </section>
 
-      <!-- Issue -->
+      <!-- Issue (Batch slip) -->
       <section x-show="tab==='issue'" class="bg-white border border-slate-200 rounded-3xl shadow-sm p-5">
         <div class="text-lg font-semibold">Issue Stock (OUT)</div>
-        <div class="text-sm text-slate-500 mt-1">เมื่อ Submit ระบบจะสร้างเอกสารและส่งอีเมลอัตโนมัติตาม Department</div>
+        <div class="text-sm text-slate-500 mt-1">
+          เพิ่มหลายรายการแล้ว Submit ครั้งเดียว → ได้ RefNo ใบเดียว + ส่ง Email + แนบ PDF ใบเดียว
+        </div>
 
         <div class="mt-4 grid grid-cols-1 lg:grid-cols-6 gap-3">
           <div class="lg:col-span-2">
@@ -400,19 +423,60 @@
             <input class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200"
                    x-model="txFormOut.note">
           </div>
+
+          <div class="lg:col-span-6 flex gap-2">
+            <button class="px-4 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed"
+                    :disabled="busy"
+                    @click="addToIssueList()">
+              Add to list
+            </button>
+
+            <button class="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed"
+                    :disabled="busy || issueList.length===0"
+                    @click="submitIssueSlip()">
+              Submit slip (Send Email)
+            </button>
+          </div>
         </div>
 
-        <div class="mt-4">
-          <button class="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed"
-                  :disabled="busy"
-                  @click="submitTx('OUT')">Save OUT (Send Email)</button>
+        <div class="mt-4" x-show="issueList.length>0">
+          <div class="text-sm font-semibold">รายการในใบเบิก</div>
+          <div class="mt-2 overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="text-slate-500">
+                  <th class="text-left py-2">Item</th>
+                  <th class="text-right py-2">Qty</th>
+                  <th class="text-left py-2">Unit</th>
+                  <th class="text-left py-2">Note</th>
+                  <th class="text-right py-2">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="(r,idx) in issueList" :key="r.itemCode+'|'+r.itemName+'|'+r.unit">
+                  <tr class="border-t border-slate-100">
+                    <td class="py-2 font-medium" x-text="r.itemName"></td>
+                    <td class="py-2 text-right font-semibold" x-text="r.qty"></td>
+                    <td class="py-2" x-text="r.unit"></td>
+                    <td class="py-2" x-text="r.note"></td>
+                    <td class="py-2 text-right">
+                      <button class="px-3 py-1 rounded-lg border border-slate-200 hover:bg-slate-50"
+                              @click="issueList.splice(idx,1)">
+                        Remove
+                      </button>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
 
       <!-- New Item (Admin) -->
       <section x-show="tab==='newitem'" class="bg-white border border-slate-200 rounded-3xl shadow-sm p-5">
         <div class="text-lg font-semibold">New Item — Admin only</div>
-        <div class="text-sm text-slate-500 mt-1">ItemCode ระบบ Generate ให้อัตโนมัติ</div>
+        <div class="text-sm text-slate-500 mt-1">ItemCode ระบบ Generate อัตโนมัติ (ห้ามเพิ่มชื่อซ้ำ)</div>
 
         <div class="mt-4 grid grid-cols-1 lg:grid-cols-6 gap-3">
           <div class="lg:col-span-2">
@@ -435,6 +499,7 @@
                    x-model="itemForm.imageUrl"
                    placeholder="สำหรับใส่ image URL">
           </div>
+
           <div class="lg:col-span-2 flex items-end gap-3">
             <div class="imgbox imgbox-item-form rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 flex items-center justify-center">
               <img :src="imgSrc(itemForm.imageUrl, 240)"
@@ -538,7 +603,7 @@
         <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
           <div>
             <div class="text-lg font-semibold">Users — Admin only</div>
-            <div class="text-sm text-slate-500 mt-1">เพิ่ม/แก้ไข Role, Active และตั้งรหัสผ่าน (อัปเดตกลับชีต Users ทันที)</div>
+            <div class="text-sm text-slate-500 mt-1">เพิ่ม/แก้ไข Role, Active และ Password</div>
           </div>
 
           <div class="flex gap-2 w-full md:w-auto">
@@ -585,9 +650,6 @@
                       @click="saveUser(newUser, true)">
                 Save User
               </button>
-              <div class="text-xs text-slate-500 mt-2">
-                ถ้า StaffID มีอยู่แล้วจะอัปเดต; ถ้าเป็น user ใหม่ต้องใส่ Password
-              </div>
             </div>
           </div>
         </div>
@@ -644,29 +706,12 @@
       <!-- Settings (Admin) -->
       <section x-show="tab==='settings'" class="bg-white border border-slate-200 rounded-3xl shadow-sm p-5">
         <div class="text-lg font-semibold">Settings</div>
-        <div class="text-sm text-slate-500 mt-1">
-          การตั้งค่า email minimum stock อยู่ในชีต Config
-        </div>
+        <div class="text-sm text-slate-500 mt-1">Rebuild Inventory เมื่อมีแก้ไข Transactions ในชีตด้วยมือ</div>
 
-        <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div class="p-4 rounded-2xl border border-slate-200 bg-slate-50">
-            <div class="text-sm font-medium">Inventory maintenance</div>
-            <div class="text-xs text-slate-600 mt-1">
-              ใช้ Rebuild เมื่อมีการแก้ Transactions ใน Google Sheet ด้วยมือ
-            </div>
-            <div class="mt-3 flex gap-2">
-              <button class="px-4 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed"
-                      :disabled="busy"
-                      @click="rebuildInventory()">Rebuild Inventory</button>
-            </div>
-          </div>
-
-          <div class="p-4 rounded-2xl border border-slate-200 bg-slate-50">
-            <div class="text-sm font-medium">Security note</div>
-            <div class="text-xs text-slate-600 mt-1">
-              Token เก็บในเครื่องผู้ใช้ และ auto logout เมื่อ idle 30 นาที
-            </div>
-          </div>
+        <div class="mt-4">
+          <button class="px-4 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed"
+                  :disabled="busy"
+                  @click="rebuildInventory()">Rebuild Inventory</button>
         </div>
       </section>
 
@@ -706,9 +751,15 @@ function app() {
     loginForm: { staffId: '', password: '' },
 
     txFormIn: { itemSearch: '', itemKey: '', qty: 1, note: '' },
-    txFormOut: { itemSearch: '', itemKey: '', qty: 1, department: 'OPD Pharmacy', note: '' },
 
-    // New item: no itemCode
+    // OUT batch
+    txFormOut: { itemSearch: '', itemKey: '', qty: 1, department: 'OPD Pharmacy', note: '' },
+    issueList: [],
+
+    // slip download
+    selectedRefNos: [],
+
+    // New item (no itemCode)
     itemForm: { itemName: '', unit: '', minimum: 0, imageUrl: '' },
 
     get isAuthed() { return !!this.token && !!this.user; },
@@ -767,29 +818,26 @@ function app() {
       this.transactions = [];
       this.itemsDb = [];
       this.users = [];
+      this.issueList = [];
+      this.selectedRefNos = [];
       this.toast('Logout', 'ออกจากระบบแล้ว');
     },
 
-    // -------- Image URL Normalizer (NO drive.google.com calls) --------
+    // -------- Image URL Normalizer (NO drive.google.com/uc) --------
     extractDriveFileId(url) {
       const s = String(url || '').trim();
       if (!s) return '';
 
-      // 1) drive share link: /file/d/<id>/
       let m = s.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/i);
       if (m && m[1]) return m[1];
 
-      // 2) googleusercontent: /d/<id>
       m = s.match(/googleusercontent\.com\/d\/([a-zA-Z0-9_-]+)/i);
       if (m && m[1]) return m[1];
 
-      // 3) uc?export=view&id=<id> (บางคนเคยใส่มา)
       m = s.match(/[?&]id=([a-zA-Z0-9_-]+)/i);
       if (m && m[1]) return m[1];
 
-      // 4) user pasted only the ID
       if (/^[a-zA-Z0-9_-]{20,}$/.test(s)) return s;
-
       return '';
     },
 
@@ -802,35 +850,22 @@ function app() {
       return "data:image/svg+xml;utf8," + encodeURIComponent(svg);
     },
 
-    /**
-     * IMPORTANT FIX:
-     * - Never generate drive.google.com/uc URL (blocked by proxy; shown in your screenshot)
-     * - Prefer lh5.googleusercontent.com which serves actual image bytes
-     * - If user input is already lh3/lh5 -> use directly and append =w<size> if missing
-     * - If user input is drive share -> convert to lh5 googleusercontent
-     */
     imgSrc(inputUrl, size = 240) {
       const raw = String(inputUrl || '').trim();
       if (!raw) return this.placeholderDataUrl();
 
-      // If already googleusercontent direct, use it (append size if missing)
       if (/^https?:\/\/lh\d\.googleusercontent\.com\/d\//i.test(raw)) {
         return raw.includes('=w') ? raw : `${raw}=w${size}`;
       }
 
-      // Convert drive share link (or anything with fileId) -> lh5 googleusercontent
       const id = this.extractDriveFileId(raw);
       if (id) return `https://lh5.googleusercontent.com/d/${id}=w${size}`;
 
-      // Otherwise use as-is (non-drive image URL)
       return raw;
     },
 
     onImgError(ev) {
-      try {
-        ev.target.onerror = null;
-        ev.target.src = this.placeholderDataUrl();
-      } catch (e) {}
+      try { ev.target.onerror = null; ev.target.src = this.placeholderDataUrl(); } catch (e) {}
     },
 
     async login() {
@@ -881,7 +916,11 @@ function app() {
 
     async apiPost(payload) {
       this.markActive();
-      const res = await fetch(this.API_URL, { method: 'POST', body: JSON.stringify(payload) });
+      const res = await fetch(this.API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
       const json = await res.json();
       if (!json.ok) throw new Error(json.error || 'API error');
       return json.data;
@@ -915,7 +954,7 @@ function app() {
         to: this.txFilter.to,
         type: this.txFilter.type,
         q: this.txFilter.q,
-        limit: 500
+        limit: 1200
       });
       this.transactions = Array.isArray(data) ? data : [];
     },
@@ -964,12 +1003,8 @@ function app() {
 
         if (type === 'OUT') {
           const refNo = res.refNo || '';
-          if (res.email && res.email.sent) {
-            this.toast('Saved + Email sent', `บันทึก OUT สำเร็จ (RefNo: ${refNo}) ส่งอีเมลแล้ว`);
-          } else {
-            const err = (res.email && res.email.error) ? res.email.error : 'Unknown';
-            this.toast('Saved but email failed', `บันทึก OUT สำเร็จ (RefNo: ${refNo}) แต่ส่งอีเมลไม่สำเร็จ: ${err}`);
-          }
+          if (res.email && res.email.sent) this.toast('Saved + Email sent', `RefNo: ${refNo}`);
+          else this.toast('Saved but email failed', `RefNo: ${refNo}`);
         } else {
           this.toast('Saved', `บันทึก ${type} สำเร็จ`);
         }
@@ -984,20 +1019,81 @@ function app() {
       }
     },
 
+    // OUT list: merge duplicates into qty in same slip list
+    addToIssueList() {
+      const [itemCode, itemName, unit] = (this.txFormOut.itemKey || '||').split('|');
+      const qty = Number(this.txFormOut.qty || 0);
+      const note = String(this.txFormOut.note || '').trim();
+
+      if (!itemName || !unit) { this.toast('Error','กรุณาเลือก Item'); return; }
+      if (!qty || qty <= 0) { this.toast('Error','Qty ต้องมากกว่า 0'); return; }
+
+      const key = (itemCode||'')+'|'+itemName+'|'+unit;
+      const found = this.issueList.find(x => (x.itemCode+'|'+x.itemName+'|'+x.unit) === key);
+
+      if (found) {
+        found.qty = Number(found.qty) + qty;
+        if (note) found.note = found.note ? (found.note + ' | ' + note) : note;
+      } else {
+        this.issueList.push({ itemCode, itemName, unit, qty, note });
+      }
+
+      this.txFormOut.qty = 1;
+      this.txFormOut.note = '';
+      this.toast('Added', 'เพิ่มรายการในใบเบิกแล้ว');
+    },
+
+    async submitIssueSlip() {
+      if (!this.issueList.length) return;
+
+      const dept = String(this.txFormOut.department || '').trim();
+      if (!dept) { this.toast('Error','กรุณาเลือก Department'); return; }
+
+      this.busy = true;
+      try {
+        const res = await this.apiPost({
+          action: 'addTxBatch',
+          token: this.token,
+          department: dept,
+          items: this.issueList.map(x => ({
+            itemCode: x.itemCode,
+            itemName: x.itemName,
+            unit: x.unit,
+            qty: x.qty,
+            note: x.note || ''
+          }))
+        });
+
+        const refNo = res.refNo || '';
+        if (res.email && res.email.sent) {
+          this.toast('Saved + Email sent', `RefNo: ${refNo}`);
+        } else {
+          const err = (res.email && res.email.error) ? res.email.error : 'Unknown';
+          this.toast('Saved but email failed', `RefNo: ${refNo} | ${err}`);
+        }
+
+        this.issueList = [];
+        await this.loadAll();
+        this.tab = 'inventory';
+      } catch (e) {
+        this.toast('Error', e.message || String(e));
+      } finally {
+        this.busy = false;
+      }
+    },
+
     async saveItem() {
       const name = String(this.itemForm.itemName || '').trim();
       const unit = String(this.itemForm.unit || '').trim();
-      if (!name || !unit) {
-        this.toast('Error', 'ต้องมี ItemName และ Unit');
-        return;
-      }
+      if (!name || !unit) { this.toast('Error', 'ต้องมี ItemName และ Unit'); return; }
 
+      // client-side duplicate check
       const exists = (this.items || []).some(it =>
         String(it.itemName||'').trim().toLowerCase() === name.toLowerCase() &&
         String(it.unit||'').trim().toLowerCase() === unit.toLowerCase()
       );
       if (exists) {
-        this.toast('Duplicate', 'มี Item นี้อยู่แล้ว กรุณาไปแก้ไขที่ Database Items');
+        this.toast('Duplicate', 'มี Item นี้อยู่แล้ว (ชื่อ+หน่วยซ้ำ) กรุณาแก้ใน Database Items');
         return;
       }
 
@@ -1075,7 +1171,7 @@ function app() {
             isActive: (String(it.isActive).toUpperCase() === 'N') ? 'N' : 'Y'
           }
         });
-        this.toast('Saved', 'อัปเดต Item แล้ว');
+        this.toast('Saved', 'อัปเดต Item แล้ว (sync TX + rebuild inventory)');
         await this.loadAll();
       } catch (e) {
         this.toast('Error', e.message || String(e));
@@ -1170,6 +1266,91 @@ function app() {
       return d.toLocaleString();
     },
 
+    // ---- Slip grouping for download ----
+    outSlipOptions() {
+      const txs = Array.isArray(this.transactions) ? this.transactions : [];
+      const map = new Map();
+
+      txs.forEach(t => {
+        const type = String(t['Type(IN/OUT/ADJ)'] || '').toUpperCase();
+        const refNo = String(t.RefNo || '').trim();
+        if (type !== 'OUT') return;
+        if (!refNo || refNo === '-') return;
+
+        if (!map.has(refNo)) {
+          map.set(refNo, {
+            refNo,
+            department: String(t.Department || '').trim(),
+            staffId: String(t.StaffID || '').trim(),
+            staffName: String(t.StaffName || '').trim(),
+            timestamp: t.Timestamp ? new Date(t.Timestamp) : null,
+            items: [],
+            count: 0
+          });
+        }
+        const g = map.get(refNo);
+        g.count += 1;
+        g.items.push({
+          itemName: String(t.ItemName || '').trim(),
+          qty: t.Qty,
+          unit: String(t.Unit || '').trim(),
+          note: String(t.Note || '').trim()
+        });
+      });
+
+      return Array.from(map.values())
+        .sort((a,b) => (b.timestamp ? b.timestamp.getTime() : 0) - (a.timestamp ? a.timestamp.getTime() : 0));
+    },
+
+    // PDF ใบเบิก: ใช้ชื่อ Item อย่างเดียว + Department/Date/IssueBy
+    downloadSelectedSlipsPdf() {
+      try {
+        const selected = Array.isArray(this.selectedRefNos) ? this.selectedRefNos : [];
+        if (!selected.length) { this.toast('Error','กรุณาเลือก RefNo'); return; }
+
+        const slips = this.outSlipOptions().filter(s => selected.includes(s.refNo));
+        if (!slips.length) { this.toast('Error','ไม่พบข้อมูลใบเบิก'); return; }
+
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+
+        slips.forEach((s, idx) => {
+          if (idx > 0) doc.addPage();
+
+          const ts = s.timestamp ? s.timestamp.toLocaleString() : '';
+          const issueBy = (s.staffName ? s.staffName : s.staffId);
+
+          doc.setFontSize(16);
+          doc.text('Withdrawal Slip (OUT)', 40, 50);
+
+          doc.setFontSize(11);
+          doc.text(`RefNo: ${s.refNo}`, 40, 72);
+          doc.text(`Department: ${s.department}`, 40, 90);
+          doc.text(`Date: ${ts}`, 40, 108);
+          doc.text(`Issue By: ${issueBy} (StaffID: ${s.staffId})`, 40, 126);
+
+          const rows = s.items.map(it => [
+            it.itemName,               // ✅ ชื่อ Item เท่านั้น
+            String(it.qty ?? ''),
+            it.unit,
+            it.note
+          ]);
+
+          doc.autoTable({
+            head: [['Item', 'Qty', 'Unit', 'Note']],
+            body: rows,
+            startY: 150,
+            styles: { fontSize: 10 }
+          });
+        });
+
+        doc.save(`withdrawal_slips_${new Date().toISOString().slice(0,10)}.pdf`);
+      } catch (e) {
+        this.toast('PDF error', e.message || String(e));
+      }
+    },
+
+    // OUT Summary: ไม่รวม ItemCode + เพิ่ม IssueBy
     downloadOutSummaryPdf() {
       try {
         const { jsPDF } = window.jspdf;
@@ -1189,24 +1370,23 @@ function app() {
         doc.text(`Generated: ${createdAt.toLocaleString()} | Staff: ${staff}`, 40, 72);
 
         const rows = out.map(t => {
-          const itemCode = String(t.ItemCode || '').trim();
-          const itemName = String(t.ItemName || '').trim();
-          const itemText = `${itemCode} ${itemName}`.trim();
           return [
             this.fmtTime(t.Timestamp),
-            itemText,
+            String(t.ItemName || ''),                  // ✅ ชื่อ Item เท่านั้น
             String(t.Qty ?? ''),
             String(t.Unit ?? ''),
+            String(t.Department ?? ''),
+            String(t.StaffName || t.StaffID || ''),
             String(t.Note ?? ''),
             String(t.RefNo || '-')
           ];
         });
 
         doc.autoTable({
-          head: [['Time', 'Item', 'Qty', 'Unit', 'Note', 'Ref']],
+          head: [['Time', 'Item', 'Qty', 'Unit', 'Dept', 'Issue By', 'Note', 'RefNo']],
           body: rows,
           startY: 92,
-          styles: { fontSize: 10 }
+          styles: { fontSize: 9 }
         });
 
         doc.save(`withdrawal_summary_OUT_${createdAt.toISOString().slice(0,10)}.pdf`);
@@ -1217,27 +1397,6 @@ function app() {
   }
 }
 </script>
-</script>
-<img
-  src="https://lh5.googleusercontent.com/d/19HzXxUM02LWnKczcG2YoKuvshEh5-nlU" alt="Gemini Generated Image 46tguk46tguk46tg
-"
-  alt="badge"
-  loading="lazy"
-  decoding="async"
-  style="
-    position: fixed;
-    right: 16px;
-    bottom: calc(16px + env(safe-area-inset-bottom));
-    width: clamp(90px, 14vw, 140px);
-    height: auto;
-    border: 0;
-    border-radius: 12px;
-    box-shadow: 0 6px 18px rgba(0,0,0,.18);
-    object-fit: contain;
-    pointer-events: none;
-    z-index: 9999;
-  "
->
 
 </body>
 </html>
