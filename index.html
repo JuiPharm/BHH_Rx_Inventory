@@ -311,7 +311,7 @@
             <tbody>
               <template x-for="t in transactions" :key="t.TxID">
                 <tr class="border-t border-slate-100">
-                  <td class="py-2" x-text="fmtTime(t.Timestamp)"></td>
+                  <td class="py-2" x-text="fmtTime(t.Timestamp, t.TimestampText)"></td>
                   <td class="py-2">
                     <span class="text-xs px-2 py-1 rounded-full border"
                           :class="String(t['Type(IN/OUT/ADJ)']).toUpperCase()==='OUT' ? 'bg-amber-50 border-amber-200 text-amber-700' :
@@ -590,6 +590,19 @@
                         <span x-text="it._saving ? 'Saving...' : 'Save'"></span>
                       </span>
                     </button>
+
+                      <button class="ml-2 px-3 py-2 rounded-xl bg-rose-600 text-white hover:bg-rose-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                              :disabled="busy || it._deleting"
+                              @click="deleteDbItem(it)">
+                        <span x-show="!it._deleting">Delete</span>
+                        <span x-show="it._deleting" class="inline-flex items-center gap-2">
+                          <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"/>
+                            <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" stroke-width="4" opacity="0.75"/>
+                          </svg>
+                          Deleting...
+                        </span>
+                      </button>
                   </td>
                 </tr>
               </template>
@@ -1181,6 +1194,30 @@ function app() {
       }
     },
 
+
+    async deleteDbItem(it) {
+      if (!this.isAdmin) return;
+
+      const itemId = String(it.itemId || '').trim();
+      if (!itemId) { this.toast('Error','Missing itemId'); return; }
+
+      const ok = confirm(`ยืนยันการลบ Item นี้?\n\n${it.itemName || ''} (${it.unit || ''})`);
+      if (!ok) return;
+
+      it._deleting = true;
+      this.busy = true;
+      try {
+        await this.apiPost({ action: 'deleteItemDb', token: this.token, itemId });
+        this.toast('Deleted', 'ลบ (Deactivate) Item แล้ว');
+        await this.loadItemsDb();
+      } catch (e) {
+        this.toast('Error', e.message || String(e));
+      } finally {
+        this.busy = false;
+        it._deleting = false;
+      }
+    },
+
     async openUsers() {
       this.tab = 'users';
       if (!this.isAdmin) return;
@@ -1259,10 +1296,12 @@ function app() {
       }
     },
 
-    fmtTime(v) {
+    fmtTime(v, text) {
+      if (text) return String(text);
       if (!v) return '';
       const d = new Date(v);
       if (isNaN(d.getTime())) return String(v);
+      // fallback only
       return d.toLocaleString();
     },
 
@@ -1284,6 +1323,7 @@ function app() {
             staffId: String(t.StaffID || '').trim(),
             staffName: String(t.StaffName || '').trim(),
             timestamp: t.Timestamp ? new Date(t.Timestamp) : null,
+            timestampText: String(t.TimestampText || '').trim(),
             items: [],
             count: 0
           });
