@@ -2,7 +2,7 @@
 <html lang="th">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>BHH Inventory</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
@@ -13,7 +13,7 @@
   <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.5.31/dist/jspdf.plugin.autotable.min.js"></script>
 
   <style>
-    :root{
+    :root {
       --logo-size: 46px;
       --item-img-table: 44px;
       --item-img-mobile: 54px;
@@ -25,11 +25,12 @@
     .imgbox-item-mobile { --img-size: var(--item-img-mobile); }
     .imgbox-item-form { --img-size: var(--item-img-form); }
     .imgfit-contain { width: 100%; height: 100%; object-fit: contain; }
+    body { font-family: Arial; }
+    .admin { background: #f2f2f2; padding: 10px; }
   </style>
 </head>
 
 <body class="bg-slate-50 text-slate-900" x-data="app()" x-init="init()">
-
   <!-- Topbar -->
   <div class="sticky top-0 z-30 backdrop-blur bg-white/80 border-b border-slate-200">
     <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
@@ -101,7 +102,6 @@
 
     <!-- App -->
     <div x-show="isAuthed" class="space-y-6">
-
       <!-- Tabs -->
       <div class="flex flex-wrap gap-2">
         <button class="px-4 py-2 rounded-2xl border text-sm"
@@ -728,6 +728,14 @@
         </div>
       </section>
 
+      <!-- Admin / IT -->
+      <div id="admin" class="admin" x-show="isAdmin">
+        <h3>Admin / IT</h3>
+        <button class="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed"
+                :disabled="busy"
+                @click="health()">Health Check</button>
+        <pre id="out"></pre>
+      </div>
     </div>
   </div>
 
@@ -1194,7 +1202,6 @@ function app() {
       }
     },
 
-
     async deleteDbItem(it) {
       if (!this.isAdmin) return;
 
@@ -1433,10 +1440,19 @@ function app() {
       } catch (e) {
         this.toast('PDF error', e.message || String(e));
       }
+    },
+
+    async health() {
+      try {
+        const res = await fetch('?health=1');
+        const d = await res.json();
+        document.getElementById('out').textContent = JSON.stringify(d, null, 2);
+      } catch (e) {
+        this.toast('Error', e.message || String(e));
+      }
     }
   }
 }
 </script>
-
 </body>
 </html>
