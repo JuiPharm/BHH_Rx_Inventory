@@ -1,5 +1,5 @@
 window.INVENTORY_CONFIG = {
-  API_URL: 'PASTE_YOUR_APPS_SCRIPT_WEB_APP_EXEC_URL_HERE',
+  API_URL: 'https://script.google.com/macros/s/AKfycbwz6YOLJmxuy8-8Pqg6B35wQfiyKPNiCqvpdbekCZVg_xkJXEIQScsX_-O8jBg43h2h/exec',
   APP_NAME: 'BHH Rx Inventory',
   LOGO_URL: '',
   SYNC_INTERVAL_MS: 45000,
