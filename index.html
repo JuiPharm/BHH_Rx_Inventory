@@ -8,103 +8,178 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%230b3558'/%3E%3Cpath d='M18 34h28M32 20v28' stroke='white' stroke-width='8' stroke-linecap='round'/%3E%3C/svg%3E">
 </head>
 <body>
-<div class="app-shell">
-  <header class="topbar">
-    <div class="top-inner">
-      <img class="logo" id="logo" alt="Logo" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%230b3558'/%3E%3Cpath d='M18 34h28M32 20v28' stroke='white' stroke-width='8' stroke-linecap='round'/%3E%3C/svg%3E">
-      <div class="brand"><h1>BHH Rx Inventory</h1><p>Hospital inventory workflow • Fast Sync • Google Sheets optimized</p></div>
-      <span class="pill" id="syncText">Offline</span>
-      <span class="user-chip" id="userText"></span>
-      <button class="btn secondary" id="logoutBtn">Logout</button>
-    </div>
-  </header>
-
-  <main class="container">
-    <section class="login-card" id="loginCard">
-      <h2>Login</h2>
-      <p class="muted">ใช้ StaffID และ Password เพื่อเข้าสู่ระบบ</p>
-      <div class="grid" style="margin-top:18px">
-        <div class="field"><label>StaffID</label><input class="input" id="loginStaff" autocomplete="username"></div>
-        <div class="field"><label>Password</label><input class="input" id="loginPass" type="password" autocomplete="current-password"></div>
-        <button class="btn teal" id="loginBtn">Login</button>
-      </div>
-    </section>
-
-    <section id="appMain" class="hidden">
-      <div class="tabs">
-        <button class="tab active" data-tab="stock">Stock</button>
-        <button class="tab" data-tab="tx">Transactions</button>
-        <button class="tab admin-only" data-tab="in">Receive (IN)</button>
-        <button class="tab" data-tab="out">Issue (OUT)</button>
-        <button class="tab admin-only" data-tab="newitem">New Item</button>
-        <button class="tab admin-only" data-tab="itemsdb">Database Items</button>
-        <button class="tab admin-only" data-tab="users">Users</button>
-        <button class="tab admin-only" data-tab="settings">Settings</button>
-      </div>
-
-      <div class="stat-grid">
-        <div class="stat"><div class="num" id="statItems">0</div><div class="label">Active Items</div></div>
-        <div class="stat"><div class="num" id="statLow">0</div><div class="label">Below Minimum</div></div>
-        <div class="stat"><div class="num" id="statQty">0</div><div class="label">Total Qty Remain</div></div>
-        <div class="stat"><div class="num" id="statTx">0</div><div class="label">Transactions Today</div></div>
-      </div>
-
-      <section id="page-stock" class="page card">
-        <h2>Stock คงเหลือ</h2><p class="muted">รายการคงเหลือแบบ materialized inventory + sync version เพื่อลดการอ่าน Sheet ซ้ำ</p>
-        <div class="toolbar"><input class="input" id="inventorySearch" placeholder="ค้นหา ItemCode / ItemName / Unit" style="max-width:380px"><button class="btn secondary" id="refreshStock">Refresh</button></div>
-        <div class="table-wrap"><table><thead><tr><th>รูป</th><th>Item</th><th>คงเหลือ</th><th>หน่วย</th><th>Minimum</th><th>สถานะ</th><th>Action</th></tr></thead><tbody id="stockBody"></tbody></table></div>
-      </section>
-
-      <section id="page-tx" class="page card hidden">
-        <h2>Transactions</h2><p class="muted">ประวัติรับเข้า / เบิก / ปรับยอด พร้อม CSV export</p>
-        <div class="toolbar">
-          <select id="txType"><option value="">ALL</option><option>IN</option><option>OUT</option><option>ADJ</option></select>
-          <input class="input" id="txFrom" type="date" style="max-width:170px"><input class="input" id="txTo" type="date" style="max-width:170px">
-          <input class="input" id="txQ" placeholder="ค้นหา item, dept, staff, RefNo" style="max-width:280px">
-          <button class="btn secondary" id="applyTxFilter">Apply</button><button class="btn secondary" id="refreshTx">Refresh</button><button class="btn" id="downloadCsv">Export CSV</button>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="top-inner">
+        <div class="brand-wrap">
+          <img class="logo" id="logo" alt="Logo" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%230b3558'/%3E%3Cpath d='M18 34h28M32 20v28' stroke='white' stroke-width='8' stroke-linecap='round'/%3E%3C/svg%3E">
+          <div>
+            <h1 id="appTitle">BHH Rx Inventory</h1>
+            <p>Google Sheets backend • Fast Sync • Role-based UX</p>
+          </div>
         </div>
-        <div class="table-wrap"><table><thead><tr><th>Time</th><th>Type</th><th>Item</th><th>Qty</th><th>Unit</th><th>Dept</th><th>Issue By</th><th>Note</th><th>RefNo</th><th>Select</th></tr></thead><tbody id="txBody"></tbody></table></div>
+        <div class="top-actions">
+          <span class="sync-pill" id="syncText">Not connected</span>
+          <span class="user-chip hidden" id="userText"></span>
+          <button class="btn secondary hidden" id="logoutBtn">Logout</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="container">
+      <section class="login-card" id="loginCard">
+        <div class="login-hero">
+          <div>
+            <h2>เข้าสู่ระบบ Inventory</h2>
+            <p class="muted">ใช้ StaffID และ Password ระบบจะเปิดเมนูตามสิทธิ์จริงของผู้ใช้</p>
+          </div>
+          <span class="badge">Hospital-grade</span>
+        </div>
+        <div class="grid-login">
+          <div class="field"><label>StaffID</label><input class="input" id="loginStaff" autocomplete="username" placeholder="เช่น 520294"></div>
+          <div class="field"><label>Password</label><input class="input" id="loginPass" type="password" autocomplete="current-password"></div>
+          <button class="btn teal" id="loginBtn">Login</button>
+        </div>
+        <p class="hint">หลัง deploy ครั้งแรก ระบบจะ seed admin ตัวอย่าง 520294 / 520294 เฉพาะกรณี Users ยังว่าง</p>
       </section>
 
-      <section id="page-in" class="page card hidden admin-only">
-        <h2>Receive Stock (IN)</h2><p class="muted">Admin only</p>
-        <div class="form-row"><div class="field span-6"><label>Item</label><select id="inItem"></select></div><div class="field span-2"><label>Qty</label><input class="input" id="inQty" type="number" min="1" value="1"></div><div class="field span-4"><label>Note</label><input class="input" id="inNote"></div><button class="btn teal span-2" id="submitIn">Save IN</button></div>
-      </section>
+      <section id="appMain" class="hidden">
+        <section class="welcome-card">
+          <div>
+            <h2 id="welcomeTitle">Inventory Dashboard</h2>
+            <p id="permissionText" class="muted">กำลังโหลดสิทธิ์ผู้ใช้...</p>
+          </div>
+          <div class="quick-actions">
+            <button class="btn secondary" id="syncNowBtn">Sync now</button>
+            <button class="btn" id="exportStockBtn">Export stock CSV</button>
+          </div>
+        </section>
 
-      <section id="page-out" class="page card hidden">
-        <h2>Issue Stock (OUT)</h2><p class="muted">เพิ่มหลายรายการแล้ว Submit ครั้งเดียว → RefNo เดียว + Email/PDF จาก Backend</p>
-        <div class="form-row"><div class="field span-5"><label>Item</label><select id="outItem"></select></div><div class="field span-2"><label>Qty</label><input class="input" id="outQty" type="number" min="1" value="1"></div><div class="field span-3"><label>Department</label><select id="outDept"><option>OPD Pharmacy</option><option>IPD Pharmacy</option><option>IV Chemo</option></select></div><div class="field span-2"><label>Note</label><input class="input" id="outNote"></div><button class="btn secondary span-2" id="addIssue">Add to list</button><button class="btn teal span-3" id="submitOut">Submit slip</button></div>
-        <h3 style="margin-top:20px">รายการในใบเบิก</h3><div class="slip-list" id="issueList"></div>
-      </section>
+        <div class="stat-grid">
+          <div class="stat"><div class="stat-value" id="statItems">0</div><div class="stat-label">Active Items</div></div>
+          <div class="stat warning"><div class="stat-value" id="statLow">0</div><div class="stat-label">Below Minimum</div></div>
+          <div class="stat danger"><div class="stat-value" id="statZero">0</div><div class="stat-label">Zero / Negative</div></div>
+          <div class="stat"><div class="stat-value" id="statTxToday">0</div><div class="stat-label">Transactions Today</div></div>
+        </div>
 
-      <section id="page-newitem" class="page card hidden admin-only">
-        <h2>New Item</h2><p class="muted">ระบบ Generate ItemCode ให้อัตโนมัติ และป้องกันชื่อ+หน่วยซ้ำ</p>
-        <div class="form-row"><div class="field span-4"><label>ItemName *</label><input class="input" id="newItemName"></div><div class="field span-2"><label>Unit *</label><input class="input" id="newItemUnit"></div><div class="field span-2"><label>Minimum</label><input class="input" id="newItemMin" type="number" value="0"></div><div class="field span-4"><label>ImageURL</label><input class="input" id="newItemImg"></div><button class="btn teal span-2" id="saveNewItem">Save Item</button></div>
-      </section>
+        <nav class="tabs" id="tabs">
+          <button class="tab active" data-tab="stock" data-perm="any">Stock</button>
+          <button class="tab" data-tab="out" data-perm="canIssue">Issue (OUT)</button>
+          <button class="tab" data-tab="tx" data-perm="any">Transactions</button>
+          <button class="tab" data-tab="in" data-perm="canReceive">Receive (IN)</button>
+          <button class="tab" data-tab="adjust" data-perm="canAdjust">Adjust</button>
+          <button class="tab" data-tab="itemsdb" data-perm="canManageItems">Database Items</button>
+          <button class="tab" data-tab="users" data-perm="canManageUsers">Users & Roles</button>
+          <button class="tab" data-tab="settings" data-perm="canRebuild">Settings</button>
+        </nav>
 
-      <section id="page-itemsdb" class="page card hidden admin-only">
-        <h2>Database Items</h2><p class="muted">แก้ชื่อ/หน่วย/Minimum/รูป/สถานะ แล้ว Save</p><div class="toolbar"><button class="btn secondary" id="refreshItemsDb">Refresh</button></div>
-        <div class="table-wrap"><table><thead><tr><th>Code</th><th>Item</th><th>Unit</th><th>Minimum</th><th>Image</th><th>Active</th><th>Action</th></tr></thead><tbody id="itemsDbBody"></tbody></table></div>
-      </section>
+        <section id="page-stock" class="page card">
+          <div class="section-head">
+            <div>
+              <h2>Stock คงเหลือ</h2>
+              <p class="muted">ค้นหาเร็ว เห็น risk ทันที และกดเบิกจากรายการได้</p>
+            </div>
+            <button class="btn secondary" id="refreshStockBtn">Refresh</button>
+          </div>
+          <div class="toolbar">
+            <input class="input" id="stockSearch" placeholder="ค้นหา ItemCode / ItemName / Unit">
+            <select id="stockStatusFilter"><option value="all">ทุกสถานะ</option><option value="low">ต่ำกว่า Minimum</option><option value="zero">Zero / Negative</option><option value="near">Near Minimum</option><option value="ok">OK</option></select>
+          </div>
+          <div class="table-wrap"><table><thead><tr><th>Item</th><th>Remain</th><th>Unit</th><th>Minimum</th><th>Status</th><th>Action</th></tr></thead><tbody id="stockBody"></tbody></table></div>
+        </section>
 
-      <section id="page-users" class="page card hidden admin-only">
-        <h2>Users</h2><p class="muted">เพิ่ม/แก้ไข Role, Active และ Password</p>
-        <div class="form-row"><div class="field span-2"><label>StaffID *</label><input class="input" id="newStaffId"></div><div class="field span-3"><label>FullName</label><input class="input" id="newFullName"></div><div class="field span-2"><label>Role</label><select id="newRole"><option>User</option><option>Admin</option></select></div><div class="field span-1"><label>Active</label><select id="newActive"><option>Y</option><option>N</option></select></div><div class="field span-3"><label>Password *</label><input class="input" id="newPassword" type="password"></div><button class="btn teal span-1" id="saveNewUser">Save</button></div>
-        <div class="toolbar"><button class="btn secondary" id="refreshUsers">Refresh</button></div>
-        <div class="table-wrap"><table><thead><tr><th>StaffID</th><th>FullName</th><th>Role</th><th>Active</th><th>Set New Password</th><th>Action</th></tr></thead><tbody id="usersBody"></tbody></table></div>
-      </section>
+        <section id="page-out" class="page card hidden">
+          <div class="section-head"><div><h2>Issue Stock (OUT)</h2><p class="muted">User เห็นเฉพาะ workflow เบิกที่ใช้จริง ระบบตรวจ stock ก่อน submit</p></div></div>
+          <div class="form-row">
+            <div class="field span-5"><label>Item</label><select id="outItem"></select><small id="outRemainText" class="hint"></small></div>
+            <div class="field span-2"><label>Qty</label><input class="input" id="outQty" type="number" min="1" value="1"></div>
+            <div class="field span-3"><label>Department</label><select id="outDept"></select></div>
+            <div class="field span-4"><label>Note</label><input class="input" id="outNote" placeholder="optional"></div>
+            <button class="btn secondary span-2" id="addIssueBtn">Add to slip</button>
+            <button class="btn teal span-3" id="submitOutBtn">Submit slip</button>
+          </div>
+          <div class="slip-card">
+            <h3>รายการในใบเบิก</h3>
+            <div id="issueList" class="issue-list empty">ยังไม่มีรายการ</div>
+          </div>
+        </section>
 
-      <section id="page-settings" class="page card hidden admin-only">
-        <h2>Settings / Maintenance</h2><p class="muted">ใช้ Rebuild เมื่อมีการแก้ Transactions ใน Google Sheet ด้วยมือ</p>
-        <div class="toolbar"><button class="btn secondary" id="rebuildBtn">Rebuild Inventory</button><button class="btn" id="healthBtn">Health Check</button></div><pre id="healthOut" class="mono"></pre>
+        <section id="page-tx" class="page card hidden">
+          <div class="section-head"><div><h2>Transactions</h2><p class="muted">User ทั่วไปเห็นรายการของตน/หน่วยงาน Admin หรือผู้มีสิทธิ์ report เห็นทั้งหมด</p></div><button class="btn" id="exportTxBtn">Export CSV</button></div>
+          <div class="toolbar">
+            <select id="txType"><option value="">ALL</option><option>IN</option><option>OUT</option><option>ADJ</option></select>
+            <select id="txDept"><option value="">All departments</option></select>
+            <input class="input" id="txFrom" type="date"><input class="input" id="txTo" type="date">
+            <input class="input" id="txQ" placeholder="ค้นหา item / staff / note / RefNo">
+            <button class="btn secondary" id="applyTxBtn">Apply</button>
+          </div>
+          <div class="table-wrap"><table><thead><tr><th>Time</th><th>Type</th><th>Item</th><th>Qty</th><th>Unit</th><th>Dept</th><th>Staff</th><th>Note</th><th>RefNo</th></tr></thead><tbody id="txBody"></tbody></table></div>
+        </section>
+
+        <section id="page-in" class="page card hidden">
+          <h2>Receive Stock (IN)</h2><p class="muted">แสดงเฉพาะผู้ที่มีสิทธิ์ CanReceive หรือ Admin</p>
+          <div class="form-row">
+            <div class="field span-6"><label>Item</label><select id="inItem"></select></div>
+            <div class="field span-2"><label>Qty</label><input class="input" id="inQty" type="number" min="1" value="1"></div>
+            <div class="field span-4"><label>Note</label><input class="input" id="inNote"></div>
+            <button class="btn teal span-2" id="submitInBtn">Save IN</button>
+          </div>
+        </section>
+
+        <section id="page-adjust" class="page card hidden">
+          <h2>Adjust Stock (ADJ)</h2><p class="muted">ใช้สำหรับปรับยอด เช่น ตรวจนับจริง กรุณาระบุเหตุผลใน note ทุกครั้ง</p>
+          <div class="form-row">
+            <div class="field span-6"><label>Item</label><select id="adjItem"></select></div>
+            <div class="field span-2"><label>Qty signed</label><input class="input" id="adjQty" type="number" value="0"></div>
+            <div class="field span-4"><label>Note *</label><input class="input" id="adjNote" placeholder="เช่น physical count correction"></div>
+            <button class="btn danger span-2" id="submitAdjBtn">Save ADJ</button>
+          </div>
+        </section>
+
+        <section id="page-itemsdb" class="page card hidden">
+          <div class="section-head"><div><h2>Database Items</h2><p class="muted">เพิ่ม/แก้ไข item, minimum และสถานะ active</p></div><button class="btn secondary" id="refreshItemsDbBtn">Refresh</button></div>
+          <div class="form-row mini-form">
+            <div class="field span-5"><label>New ItemName *</label><input class="input" id="newItemName"></div>
+            <div class="field span-2"><label>Unit *</label><input class="input" id="newItemUnit"></div>
+            <div class="field span-2"><label>Minimum</label><input class="input" id="newItemMin" type="number" value="0"></div>
+            <div class="field span-3"><label>ImageURL</label><input class="input" id="newItemImg"></div>
+            <button class="btn teal span-2" id="saveNewItemBtn">Add Item</button>
+          </div>
+          <div class="toolbar"><input class="input" id="itemsDbSearch" placeholder="ค้นหา item ใน database"></div>
+          <div class="table-wrap"><table><thead><tr><th>Code</th><th>Item</th><th>Unit</th><th>Minimum</th><th>ImageURL</th><th>Active</th><th>Action</th></tr></thead><tbody id="itemsDbBody"></tbody></table></div>
+        </section>
+
+        <section id="page-users" class="page card hidden">
+          <div class="section-head"><div><h2>Users & Roles</h2><p class="muted">ตั้งสิทธิ์ละเอียด: เบิก, รับเข้า, ปรับยอด, จัดการ item, จัดการ user, ดู report, rebuild</p></div><button class="btn secondary" id="refreshUsersBtn">Refresh</button></div>
+          <div class="form-row mini-form">
+            <div class="field span-2"><label>StaffID *</label><input class="input" id="newStaffId"></div>
+            <div class="field span-3"><label>FullName</label><input class="input" id="newFullName"></div>
+            <div class="field span-2"><label>Department</label><select id="newDepartment"></select></div>
+            <div class="field span-1"><label>Role</label><select id="newRole"><option>User</option><option>Admin</option></select></div>
+            <div class="field span-1"><label>Active</label><select id="newActive"><option>Y</option><option>N</option></select></div>
+            <div class="field span-3"><label>Password *</label><input class="input" id="newPassword" type="password"></div>
+            <div class="perm-grid span-12" id="newPerms"></div>
+            <button class="btn teal span-2" id="saveNewUserBtn">Save User</button>
+          </div>
+          <div class="table-wrap"><table><thead><tr><th>StaffID</th><th>Name</th><th>Dept</th><th>Role</th><th>Active</th><th>Permissions</th><th>Password</th><th>Action</th></tr></thead><tbody id="usersBody"></tbody></table></div>
+        </section>
+
+        <section id="page-settings" class="page card hidden">
+          <h2>Settings / Maintenance</h2><p class="muted">ใช้สำหรับ Admin/IT เท่านั้น</p>
+          <div class="settings-grid">
+            <div class="setting-card"><h3>Rebuild Inventory</h3><p>ใช้เมื่อมีการแก้ Transactions ใน Google Sheet โดยตรง</p><button class="btn danger" id="rebuildBtn">Rebuild Inventory</button></div>
+            <div class="setting-card"><h3>Health Check</h3><p>ตรวจ Apps Script, sheets และ version</p><button class="btn secondary" id="healthBtn">Health Check</button></div>
+            <div class="setting-card"><h3>Minimum Stock Email</h3><p>ส่ง email เตือนรายการต่ำกว่า minimum ทันที</p><button class="btn" id="minStockEmailBtn">Send Alert</button></div>
+          </div>
+          <pre id="healthOut" class="mono"></pre>
+        </section>
       </section>
-    </section>
-  </main>
-</div>
-<div class="toast-area" id="toastArea"></div>
-<script src="js/config.js"></script>
-<script src="js/api.js"></script>
-<script src="js/app.js"></script>
-<script>if(window.INVENTORY_CONFIG && window.INVENTORY_CONFIG.LOGO_URL){document.getElementById('logo').src=window.INVENTORY_CONFIG.LOGO_URL;}</script>
+    </main>
+  </div>
+
+  <div class="toast-area" id="toastArea"></div>
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/app.js"></script>
 </body>
 </html>
