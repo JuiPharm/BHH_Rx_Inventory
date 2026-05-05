@@ -20,9 +20,12 @@
     config: { departments: ['OPD Pharmacy', 'IPD Pharmacy', 'IV Chemo'] },
     items: [],
     transactions: [],
+    transactionsLoaded: false,
+    txStale: false,
     itemsDb: [],
     users: [],
     issueList: [],
+    selected: { out: null, in: null, adj: null },
     tab: 'stock',
     versions: {},
     syncTimer: null,
@@ -36,6 +39,27 @@
   function nowId() { return 'req-' + Date.now() + '-' + Math.random().toString(36).slice(2); }
   function itemKey(it) { return [it.itemCode || '', it.itemName || '', it.unit || ''].join('|'); }
   function splitKey(key) { const [itemCode, itemName, unit] = String(key || '').split('|'); return { itemCode, itemName, unit }; }
+  function imagePlaceholder() {
+    return 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22%3E%3Crect width=%2264%22 height=%2264%22 rx=%2216%22 fill=%22%23eef7fb%22/%3E%3Cpath d=%22M20 40h24M24 24h16M24 32h16%22 stroke=%22%230b3558%22 stroke-width=%224%22 stroke-linecap=%22round%22/%3E%3C/svg%3E';
+  }
+  function imgSrc(url) { return String(url || '').trim() || imagePlaceholder(); }
+  function itemCacheKey() { return (C.SESSION_KEY || 'bhh_rx_inventory_session_v3') + '_items_fastux_v3'; }
+  function saveLocalItems() { try { localStorage.setItem(itemCacheKey(), JSON.stringify({ at: Date.now(), items: state.items || [] })); } catch {} }
+  function loadLocalItems() {
+    try {
+      const cached = JSON.parse(localStorage.getItem(itemCacheKey()) || 'null');
+      if (cached && Array.isArray(cached.items) && cached.items.length) {
+        state.items = cached.items;
+        renderItemPickers();
+        renderStock();
+        setSyncText('Loaded cached stock • syncing...', 'loading');
+        return true;
+      }
+    } catch {}
+    return false;
+  }
+  function normalizeText(s) { return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim(); }
+  function itemSearchHay(it) { return normalizeText([it.itemCode, it.itemName, it.unit].join(' ')); }
   function hasPerm(perm) { return !!(state.user && (state.user.role === 'Admin' || perm === 'any' || (state.user.permissions && state.user.permissions[perm]))); }
 
   function toast(title, detail, type = '') {
@@ -47,9 +71,15 @@
     setTimeout(() => el.remove(), 5200);
   }
 
-  function setBusy(flag) {
+  function setBusy(flag, title = 'กำลังทำงาน...', detail = 'กรุณารอสักครู่') {
     state.busy = flag;
     document.body.classList.toggle('busy', flag);
+    const loader = $('#globalLoader');
+    if (loader) loader.classList.toggle('hidden', !flag);
+    const titleEl = $('#loaderTitle');
+    const detailEl = $('#loaderDetail');
+    if (titleEl) titleEl.textContent = title;
+    if (detailEl) detailEl.textContent = detail;
   }
 
   function setSyncText(text, status = '') {
@@ -123,27 +153,95 @@
 
   function renderStats() {
     const items = state.items || [];
-    const txs = state.transactions || [];
+    const txs = state.transactionsLoaded ? (state.transactions || []) : [];
     const today = new Date().toISOString().slice(0, 10);
     $('#statItems').textContent = fmt(items.length);
     $('#statLow').textContent = fmt(items.filter(x => x.belowMin).length);
     $('#statZero').textContent = fmt(items.filter(x => x.zeroStock).length);
-    $('#statTxToday').textContent = fmt(txs.filter(t => String(t.TimestampText || '').startsWith(today)).length);
+    $('#statTxToday').textContent = state.transactionsLoaded
+      ? fmt(txs.filter(t => String(t.TimestampText || '').startsWith(today)).length)
+      : '—';
   }
 
-  function renderItemSelects() {
-    const options = state.items.map(it => {
-      const k = itemKey(it);
-      const label = `${it.itemName} (${fmt(it.qtyRemain)} ${it.unit})`;
-      return `<option value="${esc(k)}">${esc(label)}</option>`;
-    }).join('');
-    ['#outItem', '#inItem', '#adjItem'].forEach(sel => { const el = $(sel); if (el) el.innerHTML = options; });
+  function renderItemPickers() {
+    ['out', 'in', 'adj'].forEach(kind => {
+      renderSelectedItem(kind);
+      hideSuggestions(kind);
+    });
     renderOutRemain();
   }
 
+  function selectedBoxId(kind) { return '#' + kind + 'Selected'; }
+  function inputId(kind) { return '#' + kind + 'Search'; }
+  function suggestionsId(kind) { return '#' + kind + 'Suggestions'; }
+
+  function renderSelectedItem(kind) {
+    const el = $(selectedBoxId(kind));
+    if (!el) return;
+    const it = state.selected[kind];
+    if (!it) {
+      el.className = 'selected-item muted';
+      el.textContent = 'ยังไม่ได้เลือกรายการ';
+      return;
+    }
+    el.className = 'selected-item ok';
+    el.innerHTML = `<div class="sel-head"><img class="item-thumb tiny" loading="lazy" src="${esc(imgSrc(it.imageUrl))}" onerror="this.src='${imagePlaceholder()}'"><div><strong>${esc(it.itemName)}</strong><small>${esc(it.itemCode || '-')} • คงเหลือ ${fmt(it.qtyRemain)} ${esc(it.unit)} • Min ${fmt(it.minimum)}</small></div></div>`;
+  }
+
+  function hideSuggestions(kind) {
+    const el = $(suggestionsId(kind));
+    if (el) el.classList.add('hidden');
+  }
+
+  function filterPickerItems(kind, q) {
+    const text = normalizeText(q);
+    let rows = state.items || [];
+    if (kind === 'out') rows = rows.filter(it => num(it.qtyRemain) > 0);
+    if (text) rows = rows.filter(it => itemSearchHay(it).includes(text));
+    return rows.slice(0, 30);
+  }
+
+  function renderSuggestions(kind) {
+    const input = $(inputId(kind));
+    const box = $(suggestionsId(kind));
+    if (!input || !box) return;
+    const q = input.value.trim();
+    const rows = filterPickerItems(kind, q);
+    if (!q && !rows.length) { hideSuggestions(kind); return; }
+    box.innerHTML = rows.length ? rows.map(it => `
+      <button type="button" class="suggestion" data-pick-kind="${kind}" data-pick-key="${esc(itemKey(it))}">
+        <img class="item-thumb small" loading="lazy" src="${esc(imgSrc(it.imageUrl))}" onerror="this.src='${imagePlaceholder()}'">
+        <span><strong>${esc(it.itemName)}</strong><small>${esc(it.itemCode || '-')} • ${esc(it.unit)} • Min ${fmt(it.minimum)}</small></span>
+        <span class="remain">${fmt(it.qtyRemain)} ${esc(it.unit)}</span>
+      </button>`).join('') : '<div class="empty-cell">ไม่พบรายการที่ค้นหา</div>';
+    box.classList.remove('hidden');
+  }
+
+  function selectItem(kind, it) {
+    if (!it) return;
+    state.selected[kind] = it;
+    const input = $(inputId(kind));
+    if (input) input.value = `${it.itemName} ${it.itemCode ? '(' + it.itemCode + ')' : ''}`;
+    renderSelectedItem(kind);
+    hideSuggestions(kind);
+    if (kind === 'out') renderOutRemain();
+  }
+
+  function getSelectedItem(kind) {
+    const it = state.selected[kind];
+    if (it) return it;
+    const input = $(inputId(kind));
+    const q = input ? input.value.trim() : '';
+    const matches = filterPickerItems(kind, q);
+    if (matches.length === 1) {
+      selectItem(kind, matches[0]);
+      return matches[0];
+    }
+    throw new Error('กรุณาค้นหาและเลือกรายการจากผลลัพธ์ก่อน');
+  }
+
   function renderOutRemain() {
-    const key = $('#outItem')?.value;
-    const it = state.items.find(x => itemKey(x) === key);
+    const it = state.selected.out;
     $('#outRemainText').textContent = it ? `คงเหลือ ${fmt(it.qtyRemain)} ${it.unit} • Minimum ${fmt(it.minimum)}` : '';
   }
 
@@ -176,7 +274,7 @@
       const [label, cls] = stockStatus(it);
       const canIssue = hasPerm('canIssue') && !it.zeroStock;
       return `<tr>
-        <td><div class="item-title"><span class="code">${esc(it.itemCode || '-')}</span><strong>${esc(it.itemName)}</strong></div></td>
+        <td><div class="stock-item"><img class="item-thumb" loading="lazy" src="${esc(imgSrc(it.imageUrl))}" onerror="this.src='${imagePlaceholder()}'"><div class="item-title"><span class="code">${esc(it.itemCode || '-')}</span><strong>${esc(it.itemName)}</strong><small class="muted">${esc(it.unit)}</small></div></div></td>
         <td class="num ${it.zeroStock ? 'neg' : ''}">${fmt(it.qtyRemain)}</td>
         <td>${esc(it.unit)}</td>
         <td>${fmt(it.minimum)}</td>
@@ -265,15 +363,9 @@
     });
   }
 
-  function getSelectedItem(sel) {
-    const it = state.items.find(x => itemKey(x) === $(sel).value);
-    if (!it) throw new Error('กรุณาเลือก Item');
-    return it;
-  }
-
   function addIssueFromForm() {
     try {
-      const it = getSelectedItem('#outItem');
+      const it = getSelectedItem('out');
       const qty = num($('#outQty').value);
       if (!qty || qty <= 0) throw new Error('Qty ต้องมากกว่า 0');
       if (qty > num(it.qtyRemain)) throw new Error(`Stock ไม่พอ คงเหลือ ${fmt(it.qtyRemain)} ${it.unit}`);
@@ -297,13 +389,17 @@
     }));
     if (items.some(x => !x.qty || x.qty <= 0)) return toast('Qty ไม่ถูกต้อง', 'กรุณาตรวจจำนวนทุกแถว', 'error');
     try {
-      setBusy(true);
+      setBusy(true, 'กำลังบันทึกใบเบิก...', 'ระบบกำลังตัด stock และสร้าง RefNo');
       const res = await API.request('addtxbatch', { department: $('#outDept').value, items, clientRequestId: nowId() }, { method: 'POST' });
       toast('สร้างใบเบิกสำเร็จ', `RefNo: ${res.refNo || ''}`, 'ok');
       state.issueList = [];
+      state.selected.out = null;
+      $('#outSearch').value = '';
+      renderSelectedItem('out');
       renderIssueList();
       await forceSync();
       setTab('tx');
+      await loadTransactions(true);
     } catch (err) { toast('Submit ไม่สำเร็จ', err.message, 'error'); }
     finally { setBusy(false); }
   }
@@ -311,44 +407,61 @@
   async function submitTx(type) {
     try {
       let item; let qty; let note; let department = '';
-      if (type === 'IN') { item = getSelectedItem('#inItem'); qty = num($('#inQty').value); note = $('#inNote').value.trim(); }
-      if (type === 'ADJ') { item = getSelectedItem('#adjItem'); qty = num($('#adjQty').value); note = $('#adjNote').value.trim(); if (!note) throw new Error('ADJ ต้องระบุ note'); }
+      if (type === 'IN') { item = getSelectedItem('in'); qty = num($('#inQty').value); note = $('#inNote').value.trim(); }
+      if (type === 'ADJ') { item = getSelectedItem('adj'); qty = num($('#adjQty').value); note = $('#adjNote').value.trim(); if (!note) throw new Error('ADJ ต้องระบุ note'); }
       if (!qty || (qty <= 0 && type !== 'ADJ')) throw new Error('Qty ไม่ถูกต้อง');
-      setBusy(true);
+      setBusy(true, 'กำลังบันทึกรายการ...', 'ระบบกำลังอัปเดต stock ใน Google Sheets');
       await API.request('addtx', { tx: { type, ...item, qty, note, department, clientRequestId: nowId() } }, { method: 'POST' });
       toast('บันทึกสำเร็จ', type, 'ok');
-      if (type === 'IN') { $('#inQty').value = '1'; $('#inNote').value = ''; }
-      if (type === 'ADJ') { $('#adjQty').value = '0'; $('#adjNote').value = ''; }
+      if (type === 'IN') { $('#inQty').value = '1'; $('#inNote').value = ''; state.selected.in = null; $('#inSearch').value = ''; renderSelectedItem('in'); }
+      if (type === 'ADJ') { $('#adjQty').value = '0'; $('#adjNote').value = ''; state.selected.adj = null; $('#adjSearch').value = ''; renderSelectedItem('adj'); }
       await forceSync();
     } catch (err) { toast('บันทึกไม่สำเร็จ', err.message, 'error'); }
     finally { setBusy(false); }
   }
 
-  async function loadTransactions() {
+  async function loadTransactions(showBusy = true) {
     const params = { limit: 500, type: state.filters.txType, department: state.filters.txDept, from: state.filters.txFrom, to: state.filters.txTo, q: state.filters.txQ };
-    state.transactions = await API.request('transactions', params);
-    renderTransactions();
+    try {
+      if (showBusy) setBusy(true, 'กำลังโหลด Transactions...', 'โหลดเฉพาะตอนเปิดหน้านี้ เพื่อลดเวลาหน้าแรก');
+      state.transactions = await API.request('transactions', params);
+      state.transactionsLoaded = true;
+      state.txStale = false;
+      renderTransactions();
+    } finally {
+      if (showBusy) setBusy(false);
+    }
   }
 
-  async function sync(silent = false) {
+  async function sync(silent = false, includeTransactions = false) {
     if (!state.token) return;
-    if (!silent) setSyncText('Syncing...', 'loading');
+    if (!silent) setSyncText('Syncing stock...', 'loading');
     const data = await API.request('sync', {
       stockVersion: state.versions.stock || '',
-      txVersion: state.versions.tx || ''
+      txVersion: state.versions.tx || '',
+      includeTransactions: includeTransactions ? 'Y' : '',
+      txLimit: 300
     });
     state.config = data.config || state.config;
     state.user = data.user || state.user;
     if (data.versions) state.versions = data.versions;
-    if (data.items) state.items = data.items;
-    if (data.transactions) state.transactions = data.transactions;
+    if (data.items) {
+      state.items = data.items;
+      saveLocalItems();
+    }
+    if (data.transactions) {
+      state.transactions = data.transactions;
+      state.transactionsLoaded = true;
+    } else if (data.txChanged) {
+      state.txStale = true;
+    }
     API.saveVersions(state.versions);
     renderDepartments();
-    renderItemSelects();
+    renderItemPickers();
     renderStock();
-    renderTransactions();
+    if (state.transactionsLoaded) renderTransactions();
     updateRoleUI();
-    setSyncText('Synced ' + new Date().toLocaleTimeString('th-TH'), 'ok');
+    setSyncText('Stock synced ' + new Date().toLocaleTimeString('th-TH'), 'ok');
   }
 
   async function forceSync() {
@@ -358,7 +471,7 @@
 
   async function login() {
     try {
-      setBusy(true);
+      setBusy(true, 'กำลังเข้าสู่ระบบ...', 'กำลังตรวจสอบ StaffID และโหลด Stock ล่าสุด');
       const staffId = $('#loginStaff').value.trim();
       const password = $('#loginPass').value;
       const data = await API.request('login', { staffId, password }, { token: '' });
@@ -380,6 +493,9 @@
     state.user = null;
     state.items = [];
     state.transactions = [];
+    state.transactionsLoaded = false;
+    state.txStale = false;
+    state.selected = { out: null, in: null, adj: null };
     $('#appMain').classList.add('hidden');
     $('#loginCard').classList.remove('hidden');
     $('#logoutBtn').classList.add('hidden');
@@ -542,6 +658,7 @@
       state.token = sess.token;
       state.user = sess.user;
       state.versions = API.getVersions();
+      loadLocalItems();
       try {
         await sync(false);
         startAutoSync();
@@ -558,16 +675,23 @@
     document.addEventListener('click', e => {
       const t = e.target;
       if (t.matches('#loginBtn')) login();
+      const pickBtn = t.closest('[data-pick-kind]');
+      if (pickBtn) { const it = state.items.find(x => itemKey(x) === pickBtn.dataset.pickKey); selectItem(pickBtn.dataset.pickKind, it); }
       if (t.matches('#logoutBtn')) logout(true);
       if (t.matches('#syncNowBtn') || t.matches('#refreshStockBtn')) forceSync().catch(err => toast('Sync error', err.message, 'error'));
-      if (t.matches('.tab')) { setTab(t.dataset.tab); if (state.tab === 'itemsdb' && hasPerm('canManageItems')) loadItemsDb().catch(err => toast('Load items error', err.message, 'error')); if (state.tab === 'users' && hasPerm('canManageUsers')) loadUsers().catch(err => toast('Load users error', err.message, 'error')); }
+      if (t.matches('.tab')) {
+        setTab(t.dataset.tab);
+        if (state.tab === 'tx' && (!state.transactionsLoaded || state.txStale)) loadTransactions(true).catch(err => toast('Load transactions error', err.message, 'error'));
+        if (state.tab === 'itemsdb' && hasPerm('canManageItems')) loadItemsDb().catch(err => toast('Load items error', err.message, 'error'));
+        if (state.tab === 'users' && hasPerm('canManageUsers')) loadUsers().catch(err => toast('Load users error', err.message, 'error'));
+      }
       if (t.matches('#addIssueBtn')) addIssueFromForm();
       if (t.matches('#submitOutBtn')) submitOut();
       if (t.matches('#submitInBtn')) submitTx('IN');
       if (t.matches('#submitAdjBtn')) submitTx('ADJ');
       if (t.matches('[data-remove-issue]')) { state.issueList.splice(Number(t.dataset.removeIssue), 1); renderIssueList(); }
-      if (t.matches('[data-quick-out]')) { $('#outItem').value = t.dataset.quickOut; renderOutRemain(); setTab('out'); $('#outQty').focus(); }
-      if (t.matches('#applyTxBtn')) { loadTransactions().catch(err => toast('Load transactions error', err.message, 'error')); }
+      if (t.matches('[data-quick-out]')) { const it = state.items.find(x => itemKey(x) === t.dataset.quickOut); selectItem('out', it); setTab('out'); $('#outQty').focus(); }
+      if (t.matches('#applyTxBtn')) { loadTransactions(true).catch(err => toast('Load transactions error', err.message, 'error')); }
       if (t.matches('#exportStockBtn')) exportStock();
       if (t.matches('#exportTxBtn')) exportTx();
       if (t.matches('#saveNewItemBtn')) saveNewItem();
@@ -587,12 +711,14 @@
       if (t.matches('#stockSearch')) { state.filters.stockQ = t.value; renderStock(); }
       if (t.matches('#itemsDbSearch')) { state.filters.itemsDbQ = t.value; renderItemsDb(); }
       if (t.matches('#txQ')) state.filters.txQ = t.value;
+      if (t.matches('#outSearch')) { state.selected.out = null; renderSelectedItem('out'); renderOutRemain(); renderSuggestions('out'); }
+      if (t.matches('#inSearch')) { state.selected.in = null; renderSelectedItem('in'); renderSuggestions('in'); }
+      if (t.matches('#adjSearch')) { state.selected.adj = null; renderSelectedItem('adj'); renderSuggestions('adj'); }
     });
 
     document.addEventListener('change', e => {
       const t = e.target;
       if (t.matches('#stockStatusFilter')) { state.filters.stockStatus = t.value; renderStock(); }
-      if (t.matches('#outItem')) renderOutRemain();
       if (t.matches('#txType')) state.filters.txType = t.value;
       if (t.matches('#txDept')) state.filters.txDept = t.value;
       if (t.matches('#txFrom')) state.filters.txFrom = t.value;
@@ -601,6 +727,14 @@
     });
 
     $('#loginPass')?.addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+    ['out','in','adj'].forEach(kind => {
+      const input = $(inputId(kind));
+      input?.addEventListener('focus', () => renderSuggestions(kind));
+      input?.addEventListener('keydown', e => { if (e.key === 'Escape') hideSuggestions(kind); });
+    });
+    document.addEventListener('click', e => {
+      if (!e.target.closest('.picker')) ['out','in','adj'].forEach(hideSuggestions);
+    });
   }
 
   function initStatic() {

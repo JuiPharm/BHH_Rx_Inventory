@@ -8,6 +8,15 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%230b3558'/%3E%3Cpath d='M18 34h28M32 20v28' stroke='white' stroke-width='8' stroke-linecap='round'/%3E%3C/svg%3E">
 </head>
 <body>
+  <div id="globalLoader" class="global-loader hidden" aria-live="polite">
+    <div class="loader-card">
+      <div class="loader-ring"></div>
+      <div>
+        <strong id="loaderTitle">กำลังโหลดข้อมูล...</strong>
+        <span id="loaderDetail">ระบบกำลังเชื่อมต่อ Google Sheets</span>
+      </div>
+    </div>
+  </div>
   <div class="app-shell">
     <header class="topbar">
       <div class="top-inner">
@@ -91,7 +100,14 @@
         <section id="page-out" class="page card hidden">
           <div class="section-head"><div><h2>Issue Stock (OUT)</h2><p class="muted">User เห็นเฉพาะ workflow เบิกที่ใช้จริง ระบบตรวจ stock ก่อน submit</p></div></div>
           <div class="form-row">
-            <div class="field span-5"><label>Item</label><select id="outItem"></select><small id="outRemainText" class="hint"></small></div>
+            <div class="field span-5"><label>ค้นหา Item / พัสดุ</label>
+              <div class="picker" data-picker="out">
+                <input class="input picker-input" id="outSearch" placeholder="พิมพ์บางส่วน เช่น ชื่อยา / code / unit">
+                <div class="suggestions hidden" id="outSuggestions"></div>
+                <div class="selected-item muted" id="outSelected">ยังไม่ได้เลือกรายการ</div>
+              </div>
+              <small id="outRemainText" class="hint"></small>
+            </div>
             <div class="field span-2"><label>Qty</label><input class="input" id="outQty" type="number" min="1" value="1"></div>
             <div class="field span-3"><label>Department</label><select id="outDept"></select></div>
             <div class="field span-4"><label>Note</label><input class="input" id="outNote" placeholder="optional"></div>
@@ -105,7 +121,7 @@
         </section>
 
         <section id="page-tx" class="page card hidden">
-          <div class="section-head"><div><h2>Transactions</h2><p class="muted">User ทั่วไปเห็นรายการของตน/หน่วยงาน Admin หรือผู้มีสิทธิ์ report เห็นทั้งหมด</p></div><button class="btn" id="exportTxBtn">Export CSV</button></div>
+          <div class="section-head"><div><h2>Transactions</h2><p class="muted">โหลดเมื่อต้องการเท่านั้น เพื่อลดเวลาหน้าแรก / User ทั่วไปเห็นรายการของตนหรือหน่วยงาน</p></div><button class="btn" id="exportTxBtn">Export CSV</button></div>
           <div class="toolbar">
             <select id="txType"><option value="">ALL</option><option>IN</option><option>OUT</option><option>ADJ</option></select>
             <select id="txDept"><option value="">All departments</option></select>
@@ -119,7 +135,13 @@
         <section id="page-in" class="page card hidden">
           <h2>Receive Stock (IN)</h2><p class="muted">แสดงเฉพาะผู้ที่มีสิทธิ์ CanReceive หรือ Admin</p>
           <div class="form-row">
-            <div class="field span-6"><label>Item</label><select id="inItem"></select></div>
+            <div class="field span-6"><label>ค้นหา Item / พัสดุ</label>
+              <div class="picker" data-picker="in">
+                <input class="input picker-input" id="inSearch" placeholder="พิมพ์บางส่วนเพื่อค้นหาและเลือกรายการ">
+                <div class="suggestions hidden" id="inSuggestions"></div>
+                <div class="selected-item muted" id="inSelected">ยังไม่ได้เลือกรายการ</div>
+              </div>
+            </div>
             <div class="field span-2"><label>Qty</label><input class="input" id="inQty" type="number" min="1" value="1"></div>
             <div class="field span-4"><label>Note</label><input class="input" id="inNote"></div>
             <button class="btn teal span-2" id="submitInBtn">Save IN</button>
@@ -129,7 +151,13 @@
         <section id="page-adjust" class="page card hidden">
           <h2>Adjust Stock (ADJ)</h2><p class="muted">ใช้สำหรับปรับยอด เช่น ตรวจนับจริง กรุณาระบุเหตุผลใน note ทุกครั้ง</p>
           <div class="form-row">
-            <div class="field span-6"><label>Item</label><select id="adjItem"></select></div>
+            <div class="field span-6"><label>ค้นหา Item / พัสดุ</label>
+              <div class="picker" data-picker="adj">
+                <input class="input picker-input" id="adjSearch" placeholder="พิมพ์บางส่วนเพื่อค้นหาและเลือกรายการ">
+                <div class="suggestions hidden" id="adjSuggestions"></div>
+                <div class="selected-item muted" id="adjSelected">ยังไม่ได้เลือกรายการ</div>
+              </div>
+            </div>
             <div class="field span-2"><label>Qty signed</label><input class="input" id="adjQty" type="number" value="0"></div>
             <div class="field span-4"><label>Note *</label><input class="input" id="adjNote" placeholder="เช่น physical count correction"></div>
             <button class="btn danger span-2" id="submitAdjBtn">Save ADJ</button>

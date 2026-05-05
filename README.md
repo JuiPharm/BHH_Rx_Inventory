@@ -1,58 +1,69 @@
-# BHH Rx Inventory - Google Sheets UX + Permissions v2
+# BHH Rx Inventory - Fast UX Google Sheets Version v3
 
-ชุดนี้เป็นเวอร์ชันปรับปรุงสำหรับใช้งานต่อบน Google Sheets + Google Apps Script + GitHub Pages โดยไม่ย้าย database ไป Supabase
+เวอร์ชันนี้ออกแบบใหม่เพื่อแก้ปัญหาโหลดนานบน Google Sheets โดยยังใช้สถาปัตยกรรมเดิม:
 
-## จุดที่ปรับปรุงสำคัญ
+- GitHub Pages frontend
+- Google Apps Script Web App backend
+- Google Sheets database
 
-1. UX สำหรับ User / Admin แยกตามสิทธิ์จริง
-2. เพิ่ม permission แบบละเอียด ไม่ใช่มีแค่ Admin/User
-3. เพิ่ม fast sync ผ่าน `sync` endpoint + version check
-4. ใช้ `Inventory` materialized table ลดการคำนวณ stock จาก Transactions ทุกครั้ง
-5. ตรวจ stock ก่อน OUT เพื่อป้องกัน stock ติดลบโดยไม่ตั้งใจ
-6. เพิ่ม transaction idempotency ด้วย `ClientRequestId` ลดปัญหากด submit ซ้ำ
-7. เพิ่ม audit log สำหรับ login, transaction, item, user, rebuild
-8. เพิ่ม UI ค้นหา stock, filter status, dashboard risk cards, CSV export
-9. เพิ่ม role-aware transactions: user ปกติเห็นรายการของตน/หน่วยงาน ส่วน Admin หรือ CanViewReports เห็นทั้งหมด
+## จุดปรับปรุงหลัก
 
-## โครงสร้างไฟล์
+1. หน้าแรกไม่โหลด Transactions อัตโนมัติแล้ว
+   - โหลดเฉพาะ Stock / Items / Config ที่จำเป็น
+   - Transactions จะโหลดเมื่อกดเมนู Transactions หรือกด Apply filter เท่านั้น
 
-```text
-apps-script/Code.gs          Google Apps Script backend
-index.html                   GitHub Pages frontend
-css/styles.css               Hospital-grade UI
-js/config.js                 API config
-js/api.js                    API client + JSONP read support
-js/app.js                    Main UI logic
-docs/DEPLOYMENT.md           วิธี deploy
-docs/USER_ROLES.md           คำอธิบายสิทธิ์
-docs/SHEET_SCHEMA.md         โครงสร้าง Sheet
-```
+2. เพิ่ม Loading animation
+   - Login
+   - Sync stock
+   - Submit OUT / IN / ADJ
+   - Load Transactions
+   - Admin actions
 
-## สิทธิ์ผู้ใช้
+3. คืนการแสดงรูปจาก ImageURL
+   - Stock table แสดงรูป thumbnail
+   - Autocomplete suggestion แสดงรูปประกอบ
+   - มี placeholder ถ้าไม่มีรูปหรือรูปโหลดไม่ได้
 
-- `Admin`: เห็นทุกเมนูและทำได้ทั้งหมด
-- `User + CanIssue`: เบิก OUT ได้
-- `CanReceive`: รับเข้า IN ได้
-- `CanAdjust`: ปรับยอด ADJ ได้
-- `CanManageItems`: จัดการ item database ได้
-- `CanManageUsers`: จัดการ user/role ได้
-- `CanViewReports`: เห็น transaction ทั้งหมด
-- `CanRebuild`: ใช้ maintenance rebuild inventory ได้
+4. เปลี่ยน Item selection เป็น autocomplete
+   - Issue OUT
+   - Receive IN
+   - Adjust ADJ
+   - พิมพ์บางส่วนของชื่อ / code / unit แล้วเลือกรายการได้ทันที
 
-## ค่าเริ่มต้น
+5. ลดเวลารอจาก Google Sheets
+   - `sync` endpoint ไม่ส่ง Transactions กลับมาโดย default
+   - `listTransactions_()` อ่านเฉพาะท้ายตารางเมื่อไม่มี filter
+   - `CacheService` เก็บ stock list 180 วินาที
+   - browser เก็บ stock cache ใน localStorage เพื่อแสดงผลได้เร็วขึ้นตอนกลับมาใช้ซ้ำ
+   - `ensureInitialized_()` ใช้ init cache เพื่อลดการตรวจ schema ซ้ำทุก request
 
-ถ้า Sheet `Users` ยังว่าง ระบบจะ seed:
+## Deploy สั้น ๆ
 
-```text
-StaffID: 520294
-Password: 520294
-Role: Admin
-```
+1. Backup Google Sheet เดิม
+2. เปิด Apps Script แล้วแทนที่ด้วย `apps-script/Code.gs`
+3. ตั้ง Script Properties:
+   - `DB_SHEET_ID`
+   - `AUTH_SECRET`
+4. Run `setupDatabase_()` 1 ครั้ง
+5. Deploy as Web App
+   - Execute as: Me
+   - Access: Anyone with link หรือ Organization ตามนโยบายโรงพยาบาล
+6. Copy Web App `/exec` URL ไปใส่ใน `js/config.js`
+7. Push โฟลเดอร์นี้ขึ้น GitHub repo แล้วเปิด GitHub Pages
 
-ควรเปลี่ยน password หลัง deploy ทันที
+## ทดสอบหลัง Deploy
 
-## หมายเหตุด้าน CORS
+- Login ได้
+- Stock แสดงเร็วขึ้นและมีรูป
+- OUT: พิมพ์บางส่วนแล้วเลือก item ได้
+- IN: พิมพ์บางส่วนแล้วเลือก item ได้
+- ADJ: พิมพ์บางส่วนแล้วเลือก item ได้
+- Transactions ไม่โหลดจนกว่าจะเปิดเมนู Transactions
+- Submit OUT แล้ว stock ลด และ RefNo ถูกสร้าง
+- Refresh stock แล้วข้อมูลเปลี่ยนตาม
 
-Reads ใช้ JSONP ได้ (`JSONP_READS: true`) เพื่อช่วยกรณี Apps Script + GitHub Pages มีปัญหา CORS
+## หมายเหตุ
 
-Writes ใช้ POST `text/plain` เป็นหลัก ถ้าเจอ CORS จริง ๆ สามารถเปิด `JSONP_WRITE_FALLBACK: true` ใน `js/config.js` ได้ แต่ควรใช้เฉพาะระบบภายใน เพราะ payload/token จะอยู่ใน URL
+- หาก Google Sheets มี Transactions จำนวนมากมาก ๆ การ filter แบบ keyword/date ที่ต้อง scan ทั้งตารางยังอาจช้าอยู่บ้าง เพราะข้อจำกัดของ Google Sheets
+- ถ้าต้องการเร็วระดับ real-time สำหรับข้อมูลหลักหมื่นถึงแสน rows ควรพิจารณาย้ายฐานข้อมูลไป Supabase/PostgreSQL
+- ห้าม commit secret, Sheet ID ที่ไม่ต้องการเปิดเผย, admin password หรือข้อมูลผู้ป่วยลง public repo
